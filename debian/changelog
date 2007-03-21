@@ -1,0 +1,18 @@
+go2 (0.070311) unstable; urgency=low
+
+  * Date version schema
+
+ -- David Villa Alises <David.Villa@uclm.es>  Tue, 20 Mar 2007 00:29:08 +0100
+
+go2 (0.2) unstable; urgency=low
+
+  * Version schema change
+
+ -- David Villa Alises <David.Villa@uclm.es>  Tue, 20 Mar 2007 00:19:57 +0100
+
+go2 (0.0.2-1) unstable; urgency=low
+
+  * Initial release 
+
+ -- David Villa Alises <David.Villa@uclm.es>  Sun, 11 Mar 2007 18:01:19 +0100
+ 
