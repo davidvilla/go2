@@ -1,10 +1,8 @@
 
-
-Description: http://arco.inf-cr.uclm.es/~dvilla/go2.html
-
+Description: http://arco.inf-cr.uclm.es/~david.villa/go2.html
 
 1. USAGE
-go2 name	searchs "name*" in current dir and home dir
+go2 name	    searchs "name*" in current dir and home dir
 go2 -i name   	searchs "name*" case insensitive
 go2 -r name   	searchs "name*" in root dir, current dir and home dir
 go2 -H        	searchs only in the history list

@@ -1,8 +1,9 @@
 
-To use go2 include this line into your .bashrc file:
-
-source /usr/share/go2/go2.sh
-
-or execute: 
+To use go2 you must execute:
 
 go2 --setup
+
+or include next line into your .bashrc file as well:
+
+source /usr/lib/go2/go2.sh
+

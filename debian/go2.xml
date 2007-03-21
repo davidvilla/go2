@@ -73,9 +73,10 @@ and docbook-xsl in your Build-Depends control field.
     <cmdsynopsis>
       <command>&dhpackage;</command>
 
-      <arg><option>-e <replaceable>this</replaceable></option></arg>
-
-      <arg><option>--example <replaceable>that</replaceable></option></arg>
+      <arg><option>-i</option></arg>
+      <arg><option>-r</option></arg>
+      <arg><option>-d</option></arg>
+      <arg><option>-H</option></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>
@@ -90,7 +91,7 @@ and docbook-xsl in your Build-Depends control field.
 
     <para>
       <command>&dhpackage;</command> is a program that finds
-      directorios.
+      directories.
     </para>
 
   </refsect1>
@@ -105,31 +106,46 @@ and docbook-xsl in your Build-Depends control field.
 
     <variablelist>
       <varlistentry>
-        <term><option>-h</option>
-          <option>--help</option>
-        </term>
+        <term><option>-i</option></term>
         <listitem>
-          <para>Show summary of options.</para>
+          <para>Case insensitive.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term><option>-v</option>
-          <option>--version</option>
-        </term>
+        <term><option>-r</option></term>
         <listitem>
-          <para>Show version of program.</para>
+          <para>Search from root directory.</para>
         </listitem>
       </varlistentry>
+      <varlistentry>
+        <term><option>-d</option></term>
+        <listitem>
+          <para>Search in hidden directories.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><option>-H</option></term>
+        <listitem>
+          <para>List the history.</para>
+        </listitem>
+      </varlistentry>
+
     </variablelist>
   </refsect1>
   <refsect1>
     <title>SEE ALSO</title>
 
-    <para>bar (1), baz (1).</para>
-
-    <para>The programs are documented fully by <citetitle>The Rise and
-      Fall of a Fooish Bar</citetitle> available via the
-      <application>Info</application> system.</para>
+<!--
+    <para>
+      The programs are documented fully by <citetitle>The Rise and Fall
+        of a Fooish Bar</citetitle> available via the
+      <application>Info</application> system.
+    </para>
+-->
+    <para>
+      This program is fully documented in
+      http://arco.inf-cr.uclm.es/~david.villa/go2.html
+    </para>
   </refsect1>
   <refsect1>
     <title>AUTHOR</title>
