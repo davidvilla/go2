@@ -1,3 +1,9 @@
+go2 (0.070312) unstable; urgency=low
+
+  * Man page added
+
+ -- David Villa Alises <David.Villa@uclm.es>  Wed, 21 Mar 2007 17:10:26 +0100
+
 go2 (0.070311) unstable; urgency=low
 
   * Date version schema
