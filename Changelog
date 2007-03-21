@@ -1,0 +1,21 @@
+
+2006-08-05 
+	* BugFix: Concordancia del patrón con un directorio local
+	corregida. opt tiene ahora un pattern tal cual lo da el usuario y
+	otro re_pattern para las expresiones regulares.
+
+2006-07-29 
+	* BugFix: Realmente se para cuando la lista llega al límite *
+	* Feature: Opción -i para 'case insensitive' y marca la porción que
+	hace match aunque no coincida el 'case'
+	* Feature: Opción -r para buscar (también) desde el directorio raíz
+	* Feature: Opción -h para activar el modo de búsqueda SOLO en el
+	historial
+	* BugFix: Arreglado un error en la gestión de la lista de paths en
+	el cacheWorker y en el historyWorker, que modificaba la lista
+	iterada en el propio bucle, perdiendo elementos.
+	
+2006-07-26 
+	* Feature: Si se indica un patrón que coincide con un directorio local
+	aparece el primero de la lista, pero sigue buscando
+	* Feature: Setup incorporado: go2 --setup 

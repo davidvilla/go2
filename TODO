@@ -1,0 +1,29 @@
+
+- en las rutas relativas al home del usuario actual cambiar $(HOME) por ~ [OK]
+
+- Guardar en un fichero las rutas a ignorar $HOME/.go/ignore [OK]
+
+- No seguir los enlaces simbólicos
+
+- poder indicar como argumento un directorio para que lo guarde en la
+   cache, debe servir también . [OK]
+   
+- una opción para hacerlo case-sensitive o no [OK]
+
+- eliminar '/' al final del patrón [OK]
+
+- Problemas al buscar algo como "algo/" [OK]
+
+- si solo se encuentra una, elegirla automáticamente [OK]
+
+- Una opción (-f) para forzar la búsqueda aunque haya un subdirectorio que
+   coincide exactamente con el patrón [OK, lo hace siempre, no hay -f]
+
+- Priorizar las rutas en las que hay matches [OK, con nuevos workers]
+
+- Una opción (-h-H) para historial de búsquedas [OK]
+
+- tamaño de caché y de historia configurable en el fichero
+
+- en go.sh, cuando no hay argumento, la función invoca "go.py ''". Hacer
+   que no ponga nada si no hay argumento. [OK]
