@@ -72,11 +72,13 @@ and docbook-xsl in your Build-Depends control field.
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>&dhpackage;</command>
-
-      <arg><option>-i</option></arg>
-      <arg><option>-r</option></arg>
-      <arg><option>-d</option></arg>
-      <arg><option>-H</option></arg>
+      <group choice="plain">
+	<arg>
+	  <arg><option><replaceable>options</replaceable></option></arg>
+	  <arg choice="plain"><replaceable>directory-prefix</replaceable></arg>
+	</arg>
+	<arg><option>-H</option></arg>
+      </group>
     </cmdsynopsis>
   </refsynopsisdiv>
   <refsect1>

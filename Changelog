@@ -1,11 +1,24 @@
+-*- coding: utf-8 -*-
+	
+2007-03-21
+	* Feature: New option --no-locale
+	* Elminado opt.force_search
+	* Añadido opt.parent_mode
+	* Feature: El locateWorker arranca 5 segundos depués del comienzo
+	* Eliminado --setup
 
+2007-03-XX
+	* Feature: Se arrancan DiskWorkers nuevos para directorios que
+	cumplen el primer elemento de un patrón compuesto
+	
+	
 2006-08-05 
 	* BugFix: Concordancia del patrón con un directorio local
 	corregida. opt tiene ahora un pattern tal cual lo da el usuario y
 	otro re_pattern para las expresiones regulares.
 
 2006-07-29 
-	* BugFix: Realmente se para cuando la lista llega al límite *
+	* BugFix: Realmente se para cuando la lista llega al límite
 	* Feature: Opción -i para 'case insensitive' y marca la porción que
 	hace match aunque no coincida el 'case'
 	* Feature: Opción -r para buscar (también) desde el directorio raíz

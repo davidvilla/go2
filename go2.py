@@ -325,7 +325,7 @@ class Worker(threading.Thread):
         return True
 
 class LocateWorker(Worker):
-    "Parse in locate output"
+    "Parse locate output"
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
 
@@ -350,7 +350,7 @@ class LocateWorker(Worker):
 
         for i in locate.stdout:
             if manager.stop.isSet():
-                os.kill(locate.pid, signal.SIGQUIT)
+                os.kill(locate.pid, signal.SIGKILL)
                 return
 
             i = i.strip('\n')
@@ -491,7 +491,7 @@ class Manager:
         self.pathList = PathList(26)
         self.observers_ = []
         
-        if opt.pattern[0] == '..':
+        if opt.parent_mode:
             self.mainJob = self.parentMode_job
         elif opt.history_mode:
             self.mainJob = self.historyMode_job
@@ -501,6 +501,7 @@ class Manager:
 	self.stop = threading.Event()
         self.state = self.INITIAL
 
+        self.tinit = time.time()
 
     def createWorker(self, workerClass, root = None, **kargs):
         if self.stop.isSet(): return None
@@ -549,21 +550,30 @@ class Manager:
 
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
-
-        w = self.createWorker(LocateWorker)
         
         dirs = list(set([os.getcwd(), os.environ['HOME']]))
         #dirs = list(set([os.getcwd()]))
 
-        if opt.from_root: dirs.append('/')
+        if opt.from_root:
+            dirs.append('/')
 
         for target in dirs:
             self.createWorker(DiskWorker, target)
 
 
     def waitJobsEnd(self):
-        while(not self.stop.isSet() and self.any_worker_alive()):
-            select.select([],[],[], 0.5)  # espera pasiva
+        locate_run = False
+        while 1:
+            if self.stop.isSet() or not self.any_worker_alive():
+                break
+            
+            select.select([],[],[], 0.25)  # espera pasiva
+            if time.time() - self.tinit > 5 and not locate_run:
+                logging.info("Arrancando locate.")
+                locate_run = True
+                if opt.locate:
+                    w = self.createWorker(LocateWorker)
+                
 
 	if self.stop.isSet(): return
 
@@ -672,7 +682,6 @@ options:
   -r:       search from root directory too
   -d:       search into dot(hidden) folders
   -H:       list the history
-  --setup:  install go2 (only first time)
 '''
     return 1
 
@@ -715,20 +724,19 @@ class Options:
     def __init__(self):
 
         self.history_mode = False
-        self.force_search = False
+        self.parent_mode = False
         self.from_root = False
         self.process_hidden = False
+        self.locate = True
         self.flags = 0
         self.matches = match_single
 
         try:
-            opts, args = getopt.getopt(sys.argv[1:], 'Hird', ['setup'])
+            opts, args = getopt.getopt(sys.argv[1:], 'Hird', ['setup','no-locate'])
         except getopt.GetoptError:
             sys.exit(usage())
 
         for o, a in opts:
-            if o == '--setup':
-                sys.exit(go2setup())
             if o == '-i':
                 self.flags |= re.IGNORECASE
             if o == '-r':
@@ -740,6 +748,11 @@ class Options:
                 self.pattern = ['']    # hack para que todos hagan matching
                 self.re_pattern = self.pattern
                 return
+            if o == '--no-locate':
+                self.locate = False
+            if o == '--setup':
+                sys.exit(go2setup())
+
 
         if not args:
             sys.exit(usage())
@@ -747,7 +760,8 @@ class Options:
         self.pattern = args
     
         if self.pattern[0] == '..':
-            self.force_search = True
+            self.parent_mode = True
+            self.pattern = ['']
 
         self.re_pattern = ['^' + x for x in self.pattern]
 

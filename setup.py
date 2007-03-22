@@ -9,7 +9,6 @@ setup(name         = 'go2',
       author_email = 'david.villa@uclm.es>',
       url          = 'http://arco.inf-cr.uclm.es/~dvilla/go2.html',
       license      = 'GPL v2 or later',
-      data_files   = [('/usr/lib/go2', ['go2.sh']),
+      data_files   = [('/usr/lib/go2', ['go2.sh','go2.py']),
                       ('/usr/share/man/man1', ['go2.1'])],
-      scripts      = ['go2.py'],
       )

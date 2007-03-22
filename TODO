@@ -8,7 +8,7 @@
 - poder indicar como argumento un directorio para que lo guarde en la
    cache, debe servir también . [OK]
    
-- una opción para hacerlo case-sensitive o no [OK]
+- una opción para hacerlo case-sensitive o no [OK, con -i]
 
 - eliminar '/' al final del patrón [OK]
 
@@ -27,3 +27,6 @@
 
 - en go.sh, cuando no hay argumento, la función invoca "go.py ''". Hacer
    que no ponga nada si no hay argumento. [OK]
+
+- Nuevas opciones:
+  --no-locate

@@ -10,8 +10,5 @@ build/go2::
 	xsltproc --nonet $(DBK2MAN_XSL) debian/go2.xml
 #	#/usr/bin/docbook-to-man debian/go2.sgml > go2.1
 
-install/go2::
-	mv $(CURDIR)/debian/go2/usr/bin/go2.py $(CURDIR)/debian/go2/usr/bin/go2cmd
-
 clean::
 	-rm go2.1
