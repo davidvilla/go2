@@ -45,6 +45,10 @@ GO2TMP =     os.path.join(GO2DIR, 'tmp')
 GO2LOG =     os.path.join(GO2DIR, 'log')
 
 
+# states
+INITIAL,  WORKING, WAITING, CANCELED, \
+NOTFOUND, FINISH,  FULL,    NOTEXIST = range(8)
+
 
 #class SyncFile:
 #    def __init__(self, fd):
@@ -186,10 +190,10 @@ class ConsoleUI(threading.Thread):
        
 	while 1:
             if len(po.poll(250)) == 0:
-                if self.state == Manager.NOTFOUND:
+                if self.state == NOTFOUND:
                     break
                 
-                elif self.state == Manager.WAITING and self.__matches == 1:
+                elif self.state == WAITING and self.__matches == 1:
                     key = ENTER
 
                 else:                
@@ -209,7 +213,7 @@ class ConsoleUI(threading.Thread):
 	    if election in range(0, self.__matches):
 		break
 
-        print 'n-->', self.__matches
+        #print 'n-->', self.__matches
         self.ttyrestore()
         manager.setElection(election)
 
@@ -219,20 +223,21 @@ class ConsoleUI(threading.Thread):
         msg_select = '\rSelect a path: '
 	print ('\r' + ' '*len(msg_select)),
 		
-	if state == Manager.WAITING:
+	if state == WAITING:
 	    print '\rSelect a path: ',
-	elif state == Manager.CANCELED:
+	elif state == CANCELED:
 	    print '\rCanceled by user'
-	elif state == Manager.NOTFOUND:
+	elif state == NOTFOUND:
             logging.info("Pattern doesn't match")
 	    print "\rPattern doesn't match\r"
-	elif state == Manager.FULL:
+	elif state == FULL:
             logging.warning('Warning: Too many matches')
 	    print '\rWarning: Too many matches!'
-	elif state == Manager.FINISH:
+	elif state == FINISH:
 	    print "\rChanging to: %s%s%s" % \
                     (self.HIGH, manager.dirname, self.LOW, opt.flags)
-	elif state == Manager.WORKING:
+	elif state == WORKING:
+            print '\rSearching...',
             return
 #	    newSize = len(manager.pathList)
 #            for path in manager.pathList[self.__last:newSize]:
@@ -253,8 +258,7 @@ class ConsoleUI(threading.Thread):
     def path_update(self, path):
         self.__matches += 1
 
-        assert  manager.state == Manager.WORKING
-
+        assert  manager.state == WORKING
 
         path = re.sub('^' + os.environ['HOME'], '~',
                       highlight(opt.pattern, path, self.HIGH, self.LOW))
@@ -287,7 +291,6 @@ class PathList:
         if self.isFull():
             logging.debug('Is full: %s' % len(self))
             raise self.FullException
-       
 
     def __getitem__(self, index):
         return self.data[index]
@@ -407,7 +410,7 @@ class HistoryWorker(Worker):
 
 
     def state_update(self, state):
-        if state != Manager.FINISH: return
+        if state != FINISH: return
         for i in self.drop:
             self.pFile.data.remove(i)
         self.pFile.insert(manager.dirname)
@@ -442,13 +445,13 @@ class CacheWorker(Worker):
 
 	
     def state_update(self, state):
-        if state == Manager.WORKING:
+        if state == WORKING:
             newSize = len(manager.pathList)
             for path in manager.pathList[self.last_:newSize]:
                 self.pFile.insert(path)
 	    self.last_ = newSize
 
-        elif state == Manager.FINISH:
+        elif state == FINISH:
             for i in self.drop: self.pFile.data.remove(i)
             self.pFile.commit()
 
@@ -505,9 +508,6 @@ class ParentWorker(Worker):
 
 class Manager:
 
-    INITIAL,  WORKING, WAITING, CANCELED, \
-    NOTFOUND, FINISH,  FULL,    NOTEXIST = range(8)
-
     def __init__(self, ignList):
         self.pathList = PathList(26)
         self.__observers = []
@@ -522,7 +522,7 @@ class Manager:
         self.ignList = ignList
         self.workers = []
 	self.stop = threading.Event()
-        self.state = self.INITIAL
+        self.state = INITIAL
 
         self.tinit = time.time()
 
@@ -543,17 +543,17 @@ class Manager:
         return w
 
     def parentMode_job(self):
-        self.state_notify(self.WORKING)
+        self.state_notify(WORKING)
         self.createWorker(ParentWorker)
 
     def historyMode_job(self):
         logging.info('go2: history mode')
-        self.state_notify(self.WORKING)
+        self.state_notify(WORKING)
         self.createWorker(HistoryWorker, fname = GO2HISTORY)
 
 
     def mainJob2(self):
-        self.state_notify(self.WORKING)
+        self.state_notify(WORKING)
         
         dirs = list(set([os.getcwd()]))
         for target in dirs:
@@ -561,7 +561,7 @@ class Manager:
 
 
     def mainJob(self):
-        self.state_notify(self.WORKING)
+        self.state_notify(WORKING)
         
         w = self.createWorker(HistoryWorker, fname = GO2HISTORY)
         if w: w.join(1)
@@ -600,10 +600,10 @@ class Manager:
 	if self.stop.isSet(): return
 
         if len(self.pathList) == 0:
-            self.state_notify(self.NOTFOUND)
+            self.state_notify(NOTFOUND)
             return
 
-        self.state_notify(self.WAITING)
+        self.state_notify(WAITING)
 
         for w in self.workers:
             logging.info("%s %s" % (id(w), w.count))
@@ -623,43 +623,43 @@ class Manager:
     def path_attach(self, ob):
         self.__path_observers.append(ob)
 		
-    def notify(self, state=None, path=None):
-        #if self.stop.isSet(): return
-
-        if state == None:
-            try:
-                self.pathList.append(path)
-            except PathList.FullException:
-                manager.notify(Manager.FULL)
-                return
-            except PathList.AlreadyExistsException:
-                return
-        else:
-            self.state = state
-        
-        if self.state == self.INITIAL: return
-        for o in self.__observers: o.update(self.state, path)
-
-        if state == self.FULL:
-            self.notify(self.WAITING)
-            self.stop.set()
+#    def notify(self, state=None, path=None):
+#        #if self.stop.isSet(): return
+#
+#        if state == None:
+#            try:
+#                self.pathList.append(path)
+#            except PathList.FullException:
+#                self.notify(FULL)
+#                return
+#            except PathList.AlreadyExistsException:
+#                return
+#        else:
+#            self.state = state
+#        
+#        if self.state == self.INITIAL: return
+#        for o in self.__observers: o.update(self.state, path)
+#
+#        if state == self.FULL:
+#            self.notify(self.WAITING)
+#            self.stop.set()
 
 
     def state_notify(self, state):
         self.state = state
-        if state == self.INITIAL: return
+        if state == INITIAL: return
         for o in self.__state_observers:
             o.state_update(self.state)
 
-        if state == self.FULL:
-            self.state_notify(self.WAITING)
+        if state == FULL:
+            self.state_notify(WAITING)
             self.stop.set()
 
     def path_notify(self, path):
         try:
             self.pathList.append(path)
         except PathList.FullException:
-            manager.state_notify(Manager.FULL)
+            self.state_notify(FULL)
             return
         except PathList.AlreadyExistsException:
             return     
@@ -682,19 +682,19 @@ class Manager:
 
 
     def setElection(self, election):
-        if self.state == self.NOTFOUND: return
+        if self.state == NOTFOUND: return
         self.stop.set()
         if election == None:
-            self.state_notify(self.CANCELED)
+            self.state_notify(CANCELED)
             return 
 
         self.dirname = self.pathList[election]
 
         if not os.path.exists(self.dirname):
-            self.state_notify(self.NOTEXIST)
+            self.state_notify(NOTEXIST)
             return
             
-        self.state_notify(self.FINISH)
+        self.state_notify(FINISH)
         saveTarget(self.dirname)
         
 
@@ -825,6 +825,7 @@ class GtkFrontend:
         self.window = self.glade.get_widget('window')
         self.wg_search = self.glade.get_widget('button_search')
         self.wg_stop =  self.glade.get_widget('button_stop')
+        self.wg_clean =  self.glade.get_widget('button_clean')
         self.wg_go = self.glade.get_widget('button_go')
 
 
@@ -852,14 +853,6 @@ class GtkFrontend:
     def main(self):
         gtk.main()
 
-    def on_window_delete_event(self, *args):
-        gtk.main_quit()
-
-    def on_button_search_clicked(self, wd):
-        thread.start_new_thread(self.all, ())
-        self.wg_search.set_sensitive(False)
-        self.wg_stop.set_sensitive(True)
-
     def all(self):
         global manager
         global opt
@@ -878,17 +871,38 @@ class GtkFrontend:
         manager.run()
         print 'fin de búsqueda'
 
+
+    def reset_gui(self):
+        self.store.clear()
+        self.wg_search.set_sensitive(True)
+        self.wg_stop.set_sensitive(False)
+        self.wg_clean.set_sensitive(False)
+        self.wg_go.set_sensitive(False) 
+
+    def on_window_delete_event(self, *args):
+        gtk.main_quit()
+
+    def on_button_search_clicked(self, wd):
+        thread.start_new_thread(self.all, ())
+        self.wg_search.set_sensitive(False)
+        self.wg_stop.set_sensitive(True)
         
+    def on_button_stop_clicked(self, wd):
+        self.wg_search.set_sensitive(True)
+        self.wg_stop.set_sensitive(False)
+        self.wg_clean.set_sensitive(True)
+        self.wg_go.set_sensitive(True)
+
+    def on_button_clean_clicked(self, wd):
+        self.reset_gui()
+
+
     def on_button_go_clicked(self, wd):
         #FIXME: controlar selección vacía
         model, it = self.selection.get_selected()
         manager.setElection(model[it][1])
         gtk.main_quit()
 
-    def on_button_cancel_clicked(self, wd):
-        self.wg_stop.set_sensitive(False)
-        self.wg_search.set_sensitive(True)
-        self.wg_go.set_sensitive(True)
 
     def offline_path_update(self, path):
         #if state == manager.FINISH:
@@ -906,10 +920,11 @@ class GtkFrontend:
 
     def offline_state_update(self, state):
         print state
-        if state == Manager.WAITING:
+        if state == WAITING:
             print 'waiting'
             self.wg_stop.set_sensitive(False)
             self.wg_search.set_sensitive(True)
+            self.wg_clean.set_sensitive(True)            
             self.wg_go.set_sensitive(True)
         return False
 
@@ -951,7 +966,7 @@ if __name__ == '__main__':
     #signal.signal(signal.SIGINT, leaveAdvice)
     #signal.signal(signal.SIGTERM, leaveAdvice)
 
-    GtkFrontend(sys.argv).main(); sys.exit()
+    #GtkFrontend(sys.argv).main(); sys.exit()
     
     opt = CmdLineOptions(sys.argv)
     main()        
