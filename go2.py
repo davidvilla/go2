@@ -119,6 +119,61 @@ class PathAsserts:
         return True
         
 
+class ConsoleUI(threading.Thread):
+    def __init__(self):
+	threading.Thread.__init__(self, name='Reader')
+	self.file = sys.stdin
+	self.matches = 0
+        self.state = None
+        manager.attach(self)
+
+    def __del__(self):
+	self.ttyrestore()
+
+    def ttyrestore(self):
+        tty.tcsetattr(self.file, termios.TCSADRAIN, self.old_settings)
+
+    def run(self):
+	#self.ttyraw()
+        self.old_settings = tty.tcgetattr(self.file)
+        tty.setraw(self.file)
+        po = select.poll()
+        po.register(self.file, select.POLLIN)
+        election = None
+       
+	while 1:
+            if len(po.poll(250)) == 0:
+                if self.state == Manager.NOTFOUND:
+                    break
+                
+                elif self.state == Manager.WAITING and self.matches == 1:
+                    key = ENTER
+
+                else:                
+                    continue
+            else:
+                key = ord(self.file.read(1))
+
+	    if key == ESC:
+		election = None
+		break
+
+            if key == ENTER:
+                election = 0
+            else:
+                election = key - ord('a')
+			
+	    if election in range(0, self.matches):
+		break
+
+        self.ttyrestore()
+        self.mgr.setElection(election)
+
+    def update(self, state):
+	self.matches = len(self.mgr.pathList)
+        self.state = state
+
+
 class Reader(threading.Thread):
     def __init__(self, mgr):
 	threading.Thread.__init__(self, name='Reader')
@@ -269,7 +324,7 @@ class PathList:
         return len(self.data)
 
     def isFull(self):
-        return len(self.data) >= self.maxSize
+        return len(self.data) > self.maxSize
 
 
 class pathFile:
@@ -307,12 +362,6 @@ class Worker(threading.Thread):
         self.ignList = ignList
         self.count = 0
 
-    def run(self):
-        try:
-            self.do_work()
-        except PathList.FullException:
-            manager.notify(Manager.FULL)
-
     def update(*args):
         pass
 
@@ -329,13 +378,14 @@ class LocateWorker(Worker):
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
 
-    def do_work(self):
+    def run(self):
         options = '-l 1000 -e -b '
         if opt.flags | re.IGNORECASE:
             options += '-i '
         cmd = 'locate %s %s' % (options, opt.pattern[0])
         logging.info('locate cmd: %s' % cmd)
-        
+
+        # FIXME: puede que locate no exista
         locate = subprocess.Popen(cmd, shell=True,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
@@ -369,7 +419,7 @@ class HistoryWorker(Worker):
         self.fname = kargs['fname']
         self.drop = []
 
-    def do_work(self):
+    def run(self):
         self.pFile = pathFile(self.fname, 500)
         for i in self.pFile.data:
             if manager.stop.isSet(): return
@@ -402,7 +452,7 @@ class CacheWorker(Worker):
         self.last_ = 0
         self.drop = []
 
-    def do_work(self):
+    def run(self):
         self.pFile = pathFile(self.fname, 1000)
         logging.info('cache len:' + str(len(self.pFile.data)))
 
@@ -438,7 +488,7 @@ class DiskWorker(Worker):
         Worker.__init__(self, *args)
         logging.info("[%s] New DiskWorker for '%s'" % (id(self), self.root))
 
-    def do_work(self):
+    def run(self):
 
         rules = PathAsserts()
         if not opt.process_hidden: rules.add(not_hidden)
@@ -475,7 +525,7 @@ class ParentWorker(Worker):
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
 
-    def do_work(self):
+    def run(self):
         lis =  os.getcwd().split(os.sep)
         for i in range(len(lis)-1, 0, -1):
             path = string.join(lis[:i] + [''], os.sep)
@@ -489,7 +539,7 @@ class Manager:
 
     def __init__(self, ignList):
         self.pathList = PathList(26)
-        self.observers_ = []
+        self.__observers = []
         
         if opt.parent_mode:
             self.mainJob = self.parentMode_job
@@ -546,7 +596,7 @@ class Manager:
 
         # si el patrón es el nombre de un subdirectorio de pwd
         if len(opt.pattern) == 1 and os.path.isdir(opt.pattern[0]):
-            self.pathList.append(os.path.abspath(opt.pattern[0]))
+            self.notify(path = os.path.abspath(opt.pattern[0]))
 
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
@@ -593,18 +643,22 @@ class Manager:
             select.select([],[],[], 0.5)  
         
     def attach(self, observer):
-        self.observers_.append(observer)
+        self.__observers.append(observer)
 		
     def notify(self, state=None, path=None):
         #if self.stop.isSet(): return
 
         if state == None:
-            self.pathList.append(path)
+            try:
+                self.pathList.append(path)
+            except PathList.FullException:
+                manager.notify(Manager.FULL)
+                return
         else:
             self.state = state
         
         if self.state == self.INITIAL: return
-        for o in self.observers_: o.update(self.state)
+        for o in self.__observers: o.update(self.state)
 
         if state == self.FULL:
             self.notify(self.WAITING)
@@ -694,7 +748,7 @@ def main():
 
     try: # Import Psyco if available
         import psyco
-        #psyco.full()
+        psyco.full()
     except ImportError:
         pass
     
@@ -773,10 +827,6 @@ class Options:
         except re.error:
             print 'go2: invalid pattern', args
             sys.exit(1)
-
-
-    #def __repr__(self):
-    #    return "root: %s" % self.fromRoot
 
 
 if __name__ == '__main__':

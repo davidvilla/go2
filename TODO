@@ -29,4 +29,7 @@
    que no ponga nada si no hay argumento. [OK]
 
 - Nuevas opciones:
-  --no-locate
+  --no-locate 
+
+- Opciones para el .go/config
+  --log-level
