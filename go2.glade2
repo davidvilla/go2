@@ -47,7 +47,7 @@
 	      <property name="text" translatable="yes"></property>
 	      <property name="has_frame">True</property>
 	      <property name="invisible_char">*</property>
-	      <property name="activates_default">False</property>
+	      <property name="activates_default">True</property>
 	    </widget>
 	    <packing>
 	      <property name="padding">0</property>
@@ -59,6 +59,8 @@
 	  <child>
 	    <widget class="GtkButton" id="button_search">
 	      <property name="visible">True</property>
+	      <property name="can_default">True</property>
+	      <property name="has_default">True</property>
 	      <property name="can_focus">True</property>
 	      <property name="label">gtk-find</property>
 	      <property name="use_stock">True</property>
@@ -155,11 +157,11 @@
 			<widget class="GtkCheckButton" id="checkbutton_hidden">
 			  <property name="visible">True</property>
 			  <property name="can_focus">True</property>
-			  <property name="label" translatable="yes">ignore hidden</property>
+			  <property name="label" translatable="yes">exclude hidden</property>
 			  <property name="use_underline">True</property>
 			  <property name="relief">GTK_RELIEF_NORMAL</property>
-			  <property name="focus_on_click">True</property>
-			  <property name="active">False</property>
+			  <property name="focus_on_click">False</property>
+			  <property name="active">True</property>
 			  <property name="inconsistent">False</property>
 			  <property name="draw_indicator">True</property>
 			</widget>
@@ -280,7 +282,7 @@
 	      <property name="use_stock">True</property>
 	      <property name="relief">GTK_RELIEF_NORMAL</property>
 	      <property name="focus_on_click">True</property>
-	      <signal name="clicked" handler="on_button_cancel_clicked" last_modification_time="Sun, 01 Apr 2007 15:06:05 GMT"/>
+	      <signal name="clicked" handler="on_button_stop_clicked" last_modification_time="Mon, 02 Apr 2007 22:40:55 GMT"/>
 	    </widget>
 	    <packing>
 	      <property name="padding">2</property>

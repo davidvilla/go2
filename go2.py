@@ -38,9 +38,10 @@ ENTER = 13
 
 #FILES
 GO2DIR =     os.path.join(os.environ['HOME'], '.go2')
-GO2IGNORE =  os.path.join(GO2DIR, 'ignore')
+GO2EXCLUDE =  os.path.join(GO2DIR, 'exclude')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE =   os.path.join(GO2DIR, 'cache')
+GO2CONFIG =  os.path.join(GO2DIR, 'config') 
 GO2TMP =     os.path.join(GO2DIR, 'tmp')
 GO2LOG =     os.path.join(GO2DIR, 'log')
 
@@ -84,21 +85,23 @@ def filterout_hidden(pathlist):
     return [x for x in pathlist if not has_dot(x)]
 
 def match_single(path):
-    return re.match(opt.re_pattern[0], os.path.basename(path), opt.flags)
+    return re.match(manager.opt.re_pattern[0],
+                    os.path.basename(path),
+                    manager.opt.flags)
 
 def match_multi(path):
     "path must be a abspath"
 
     items = path.split(os.sep)[1:]
-    pattern = opt.re_pattern
+    pattern = manager.opt.re_pattern
 
-    match = re.match(pattern[-1], items[-1], opt.flags)
+    match = re.match(pattern[-1], items[-1], manager.opt.flags)
     if not match: return False
 
     p = len(pattern) - 2
     for i in items[-2::-1]:
         if p < 0: return True
-        if re.match(pattern[p], i, opt.flags): p -= 1
+        if re.match(pattern[p], i, manager.opt.flags): p -= 1
 
     return False
 
@@ -147,6 +150,8 @@ class ConsoleUI(threading.Thread):
 
     HIGH = chr(27)+'[1m'
     LOW = chr(27)+'[m'
+
+    maxItem = 26
     
     def __init__(self):
 	threading.Thread.__init__(self, name='ConsoleUI')
@@ -235,7 +240,7 @@ class ConsoleUI(threading.Thread):
 	    print '\rWarning: Too many matches!'
 	elif state == FINISH:
 	    print "\rChanging to: %s%s%s" % \
-                    (self.HIGH, manager.dirname, self.LOW, opt.flags)
+                    (self.HIGH, manager.dirname, self.LOW)
 	elif state == WORKING:
             print '\rSearching...',
             return
@@ -258,48 +263,41 @@ class ConsoleUI(threading.Thread):
     def path_update(self, path):
         self.__matches += 1
 
+        if self.__matches > self.maxItem:
+            raise Manager.FullException
+
         assert  manager.state == WORKING
 
         path = re.sub('^' + os.environ['HOME'], '~',
-                      highlight(opt.pattern, path, self.HIGH, self.LOW))
+                      highlight(manager.opt.pattern,
+                                path, self.HIGH, self.LOW, manager.opt.flags))
                 
         print "\r%c: %s" % (chr(self.__index), path)
+        print '\rSearching...',       
         self.__index += 1
-        print '\rSearching...',        
-
 
 
 class PathList:
 
-    class FullException: pass
     class AlreadyExistsException: pass
-    def __init__(self, maxSize=26):
+    def __init__(self):
         self.data = []
-        self.maxSize = maxSize
         self.lock = threading.Lock()
 
     def append(self, item):
         if item in self.data:
             raise self.AlreadyExistsException
-        if self.isFull(): return
 
         logging.debug("PathList[%s]: %s" % (len(self), item))
         self.lock.acquire()
         self.data.append(item)
         self.lock.release()
 
-        if self.isFull():
-            logging.debug('Is full: %s' % len(self))
-            raise self.FullException
-
     def __getitem__(self, index):
         return self.data[index]
 
     def __len__(self):
         return len(self.data)
-
-    def isFull(self):
-        return len(self.data) > self.maxSize
 
 
 class pathFile:
@@ -313,7 +311,7 @@ class pathFile:
             self.data = [x.strip('\n') for x in fd.readlines()]
             fd.close()
 
-        if not opt.process_hidden:
+        if not manager.opt.process_hidden:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
@@ -330,18 +328,18 @@ class pathFile:
 class Worker(threading.Thread):
 #    i = 0 #debería ser un atributo de clase
 
-    def __init__(self, root, ignList):
+    def __init__(self, root, exclude):
         threading.Thread.__init__(self) #, name = "Worker %d" % self.i)
 #        self.i += 1
         self.root = root
-        self.ignList = ignList
+        self.exclude = exclude
         self.count = 0
 
-    def not_ignore(self, path):
+    def not_exclude(self, path):
         # Comprueba que la ruta absoluta 'path' no está excluida FIXME:
         # Comprobar también que el nombre de directorio no está excluido
         # (ej.svn)
-        for p in self.ignList:
+        for p in self.exclude:
             if path.startswith(p): return False
         return True
 
@@ -352,9 +350,9 @@ class LocateWorker(Worker):
 
     def run(self):
         options = '-l 1000 -e -b '
-        if opt.flags | re.IGNORECASE:
+        if manager.opt.flags | re.IGNORECASE:
             options += '-i '
-        cmd = 'locate %s %s' % (options, opt.pattern[0])
+        cmd = 'locate %s %s' % (options, manager.opt.pattern[0])
         logging.info('locate cmd: %s' % cmd)
 
         # FIXME: puede que locate no exista
@@ -364,11 +362,11 @@ class LocateWorker(Worker):
                                   close_fds=True)
 
         rules = PathAsserts()
-        if not opt.process_hidden: rules.add(not_hidden)
-        if not opt.from_root:      rules.add(is_local)
+        if not manager.opt.process_hidden: rules.add(not_hidden)
+        if not manager.opt.from_root:      rules.add(is_local)
         rules.add(os.path.isdir)
-        if self.ignList:           rules.add(self.not_ignore)
-        rules.add(opt.match_func)
+        if self.exclude:           rules.add(self.not_exclude)
+        rules.add(manager.opt.match_func)
 
         for i in locate.stdout:
             if manager.stop.isSet():
@@ -398,7 +396,7 @@ class HistoryWorker(Worker):
             if manager.stop.isSet(): return
 
             mdebug ("\r\n-> '%s'" % i)
-            if opt.match_func(i):
+            if manager.opt.match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -433,7 +431,7 @@ class CacheWorker(Worker):
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
-            if opt.match_func(i):
+            if manager.opt.match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -465,8 +463,8 @@ class DiskWorker(Worker):
     def run(self):
 
         rules = PathAsserts()
-        if not opt.process_hidden: rules.add(not_hidden)
-        if self.ignList:           rules.add(self.not_ignore)
+        if not manager.opt.process_hidden: rules.add(not_hidden)
+        if self.exclude:           rules.add(self.not_exclude)
         
         for root, dirs, files in os.walk(self.root):
             if manager.stop.isSet(): return
@@ -477,7 +475,7 @@ class DiskWorker(Worker):
                 #print d
                 path = os.path.join(root, d)
                 #if (d[0] == '.' and not opt.process_hidden) or \
-                #    d in self.ignList or path in self.ignList:
+                #    d in self.exclude or path in self.exclude:
                 if not rules.test(path):
                     dirs.remove(d)
                     continue
@@ -486,10 +484,10 @@ class DiskWorker(Worker):
                 #if os.path.basename(path) == "repos":
                 #    print 'SINGLE', path
 
-                if opt.match_func(path):
+                if manager.opt.match_func(path):
                     manager.path_notify(path)
                     self.count += 1
-                elif opt.match_func == match_multi and match_single(path):
+                elif manager.opt.match_func == match_multi and match_single(path):
                     manager.createWorker(DiskWorker, path)
                     dirs.remove(d)
 
@@ -508,8 +506,10 @@ class ParentWorker(Worker):
 
 class Manager:
 
-    def __init__(self, ignList):
-        self.pathList = PathList(26)
+    class FullException: pass
+
+    def __init__(self, opt):
+        self.pathList = PathList()
         self.__observers = []
         self.__state_observers = []
         self.__path_observers = []
@@ -518,8 +518,8 @@ class Manager:
             self.mainJob = self.parentMode_job
         elif opt.history_mode:
             self.mainJob = self.historyMode_job
-			
-        self.ignList = ignList
+
+        self.opt = opt
         self.workers = []
 	self.stop = threading.Event()
         self.state = INITIAL
@@ -530,14 +530,14 @@ class Manager:
         if self.stop.isSet(): return None
 
         if root:
-            ignList_cp = [x for x in self.ignList if not root.startswith(x)]
-            self.ignList.append(root)
+            exclude_cp = [x for x in self.opt.exclude if not root.startswith(x)]
+            self.opt.exclude.append(root)
         else:
-            ignList_cp = self.ignList[:]
+            exclude_cp = self.opt.exclude[:]
 
-        #print root, ignList_cp
+        #print root, exclude_cp
 
-        w = workerClass(root, ignList_cp, **kargs)
+        w = workerClass(root, exclude_cp, **kargs)
         self.workers.append(w)
         w.start()
         return w
@@ -567,8 +567,8 @@ class Manager:
         if w: w.join(1)
 
         # si el patrón es el nombre de un subdirectorio de pwd
-        if len(opt.pattern) == 1 and os.path.isdir(opt.pattern[0]):
-            self.path_notify(os.path.abspath(opt.pattern[0]))
+        if len(manager.opt.pattern) == 1 and os.path.isdir(manager.opt.pattern[0]):
+            self.path_notify(os.path.abspath(manager.opt.pattern[0]))
 
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
@@ -576,7 +576,7 @@ class Manager:
         dirs = list(set([os.getcwd(), os.environ['HOME']]))
         #dirs = list(set([os.getcwd()]))
 
-        if opt.from_root:
+        if manager.opt.from_root:
             dirs.append('/')
 
         for target in dirs:
@@ -593,7 +593,7 @@ class Manager:
             if time.time() - self.tinit > 5 and not locate_run:
                 logging.info("Arrancando locate.")
                 locate_run = True
-                if opt.locate:
+                if manager.opt.locate:
                     w = self.createWorker(LocateWorker)
                 
 
@@ -658,14 +658,14 @@ class Manager:
     def path_notify(self, path):
         try:
             self.pathList.append(path)
-        except PathList.FullException:
-            self.state_notify(FULL)
-            return
         except PathList.AlreadyExistsException:
             return     
 
-        for o in self.__path_observers:
-            o.path_update(path)
+        try:
+            for o in self.__path_observers:
+                o.path_update(path)
+        except self.FullException:
+            self.state_notify(FULL)
             
 
             
@@ -695,24 +695,24 @@ class Manager:
             return
             
         self.state_notify(FINISH)
-        saveTarget(self.dirname)
+
+        if self.opt.cmd:
+            cmd = self.opt.cmd
+            if '%d' in cmd:
+                cmd = cmd.replace('%d', '%s')
+                cmd = cmd % self.dirname
+           
+            print "command is: '%s'" % cmd
+            cmdlist = cmd.split()
+            os.chdir(self.dirname)
+            os.execvp(cmdlist[0], cmdlist)
+        else:
+            saveTarget(self.dirname)
         
 
 def leaveAdvice(*args):
     print '\rWarning: Ctrl-C ignored, to abort press ESC.'
 
-def userConfig(ignList):
-    if not os.path.exists(GO2DIR):
-        os.mkdir(GO2DIR)
-
-    # load file specified ignored paths
-    if os.path.exists(GO2IGNORE):
-        fd = open(GO2IGNORE)
-        lines = [i.strip() for i in fd.readlines()]
-        ignList.extend([i for i in lines if i]) 
-        fd.close()
-
-    if ignList: logging.debug('ignore: %s' % ignList)
 
 def go2setup():
     if os.system('grep go2.sh ~/.bashrc > /dev/null') == 0:
@@ -749,8 +749,11 @@ options:
 ################################
 
 
-class Options:
-    def __init__(self):
+class Config:
+    
+    class NoValidPatternException: pass
+    
+    def __init__(self, argv):
         self.history_mode = False
         self.parent_mode = False
         self.from_root = False
@@ -759,14 +762,37 @@ class Options:
         self.flags = 0
         self.match_func = match_single
         self.pattern = None
-    
+        self.exclude = []
+        self.cmd = None
 
-class CmdLineOptions(Options):
-    def __init__(self, argv):
-        Options.__init__(self)
+        # run follows first time only
+#        self.initial = False
+#        if self.initial: return
+#        self.initial = True
 
+        if not os.path.exists(GO2DIR):
+            os.mkdir(GO2DIR)
+
+        if os.path.exists(GO2CONFIG):
+            config = open(GO2CONFIG)
+            argv[1:1] = config.read().split()
+            config.close()
+
+        # load file specified excluded paths
+        if os.path.exists(GO2EXCLUDE):
+            fd = open(GO2EXCLUDE)
+            lines = [i.strip() for i in fd.readlines()]
+            self.exclude.extend([i for i in lines if i]) 
+            fd.close()
+
+        if self.exclude: logging.debug('exclude: %s' % self.exclude)
+
+
+        print argv
+        
         try:
-            opts, args = getopt.getopt(argv[1:], 'Hird', ['setup','no-locate'])
+            opts, self.pattern = getopt.getopt(argv[1:], 'Hird',
+                                               ['setup','no-locate', 'cmd='])
         except getopt.GetoptError:
             sys.exit(usage())
 
@@ -786,11 +812,18 @@ class CmdLineOptions(Options):
                 self.locate = False
             if o == '--setup':
                 sys.exit(go2setup())
+            if o == '--cmd':
+                self.cmd = a
 
-        if not args:
+
+
+class CmdLineConfig(Config):
+    def __init__(self, argv):
+        Config.__init__(self, argv)
+
+    def parse_pattern(self):
+        if not self.pattern:
             sys.exit(usage())
-        
-        self.pattern = args
     
         if self.pattern[0] == '..':
             self.parent_mode = True
@@ -808,21 +841,35 @@ class CmdLineOptions(Options):
             sys.exit(1)
 
 
-class GuiOptions(Options):
+class GuiConfig(Config):
     def __init__(self, argv, glade):
-        Options.__init__(self)
+        Config.__init__(self, argv)
         
-        #self.from_root = glade.get_widget('checkbutton_root').
         self.pattern = glade.get_widget('entry').get_text().split()
+        if not self.pattern:
+            raise self.NoValidPatternException
+        
         self.re_pattern = ['^' + x for x in self.pattern]
 
+        # switches
+        self.from_root = glade.get_widget('checkbutton_root').get_active()
+        if glade.get_widget('checkbutton_case').get_active():
+            self.flags |= re.IGNORECASE
+        else:
+            self.flags &= ~ re.IGNORECASE
+
+        if not glade.get_widget('checkbutton_hidden').get_active():
+            self.process_hidden = True
 
 class GtkFrontend:
     def __init__(self, argv):
+        self.argv = argv
+        
         self.glade = gtk.glade.XML('go2.glade2')
         self.glade.signal_autoconnect(self)
 
         self.window = self.glade.get_widget('window')
+        self.wg_entry = self.glade.get_widget('entry')
         self.wg_search = self.glade.get_widget('button_search')
         self.wg_stop =  self.glade.get_widget('button_stop')
         self.wg_clean =  self.glade.get_widget('button_clean')
@@ -830,9 +877,9 @@ class GtkFrontend:
 
 
         # setup treeview
-        self.treeview = self.glade.get_widget('treeview')
+        self.wg_treeview = self.glade.get_widget('treeview')
         self.store = gtk.ListStore(str, int)
-        self.treeview.set_model(self.store)
+        self.wg_treeview.set_model(self.store)
 
         self.cell = gtk.CellRendererText()
         
@@ -841,61 +888,66 @@ class GtkFrontend:
         #self.tvcolumn.pack_start(self.cell, True)
         #self.tvcolumn.add_attribute(self.cell, 'text', 0)
 
-        self.treeview.append_column(self.tvcolumn)
-        self.selection = self.treeview.get_selection()
+        self.wg_treeview.append_column(self.tvcolumn)
+        self.selection = self.wg_treeview.get_selection()
         self.selection.set_mode(gtk.SELECTION_SINGLE)
 
-        self.stop = False
-#        self.listen_events()
         self.__n = 0
-        self.argv = argv
+
 
     def main(self):
         gtk.main()
 
     def all(self):
         global manager
-        global opt
 
-        self.wg_search.set_sensitive(True)
+        #self.wg_search.set_sensitive(True)
         #FIXME: activar barra de progreso
-        
-        self.opt = GuiOptions(self.argv, self.glade)
-        opt = self.opt
 
-        ignoreList = []
-        userConfig(ignoreList)
-        manager = Manager(ignoreList)
+        try:
+            opt = GuiConfig(self.argv[:], self.glade)
+        except Config.NoValidPatternException:
+            self.gui_reset()
+            return
+        
+        manager = Manager(opt)
         manager.path_attach(self)
         manager.state_attach(self)
         manager.run()
         print 'fin de búsqueda'
 
-
-    def reset_gui(self):
-        self.store.clear()
+    def gui_reset(self):
+        self.wg_entry.set_text('')
+        self.wg_entry.grab_focus()
         self.wg_search.set_sensitive(True)
+        self.store.clear()
         self.wg_stop.set_sensitive(False)
         self.wg_clean.set_sensitive(False)
-        self.wg_go.set_sensitive(False) 
+        self.wg_go.set_sensitive(False)
+
+    def gui_working(self):
+        self.wg_search.set_sensitive(False)
+        self.wg_stop.set_sensitive(True)
+        self.wg_clean.set_sensitive(False)
+        self.wg_go.set_sensitive(False)
 
     def on_window_delete_event(self, *args):
         gtk.main_quit()
 
     def on_button_search_clicked(self, wd):
         thread.start_new_thread(self.all, ())
-        self.wg_search.set_sensitive(False)
-        self.wg_stop.set_sensitive(True)
+        self.store.clear()
+        self.gui_working()
         
     def on_button_stop_clicked(self, wd):
+        manager.stop.set()
         self.wg_search.set_sensitive(True)
         self.wg_stop.set_sensitive(False)
         self.wg_clean.set_sensitive(True)
         self.wg_go.set_sensitive(True)
 
     def on_button_clean_clicked(self, wd):
-        self.reset_gui()
-
+        self.gui_reset()
 
     def on_button_go_clicked(self, wd):
         #FIXME: controlar selección vacía
@@ -909,7 +961,10 @@ class GtkFrontend:
         #    self.stop = True
 
         tagged_path = re.sub('^' + os.environ['HOME'], '~',
-                             highlight(opt.pattern, path, '<b>', '</b>'))
+                             highlight(manager.opt.pattern,
+
+                                       path, '<b>', '</b>',
+                                       manager.opt.flags))
 
         self.store.append([tagged_path, self.__n])
         self.__n += 1
@@ -921,11 +976,20 @@ class GtkFrontend:
     def offline_state_update(self, state):
         print state
         if state == WAITING:
-            print 'waiting'
+            print 'WAITING'
             self.wg_stop.set_sensitive(False)
             self.wg_search.set_sensitive(True)
+            self.wg_treeview.grab_focus()
             self.wg_clean.set_sensitive(True)            
             self.wg_go.set_sensitive(True)
+
+        if state == NOTFOUND:
+            print 'NOTFOUND'
+            self.gui_reset()
+
+        if state == CANCELED:
+            print 'CANCELED'
+            
         return False
 
     def state_update(self, state):
@@ -933,21 +997,12 @@ class GtkFrontend:
             
 
 
-def main():
+def console_main(argv):
     global manager
 
-    try: # Import Psyco if available
-        import psyco
-        psyco.full()
-    except ImportError:
-        pass
-    
-    ignoreList = []
-
-    userConfig(ignoreList)
-
-    manager = Manager(ignoreList)
-    #UI()
+    opt = CmdLineConfig(argv)
+    opt.parse_pattern()
+    manager = Manager(opt)
     R = ConsoleUI()
     R.start()
     manager.run()
@@ -966,8 +1021,16 @@ if __name__ == '__main__':
     #signal.signal(signal.SIGINT, leaveAdvice)
     #signal.signal(signal.SIGTERM, leaveAdvice)
 
-    #GtkFrontend(sys.argv).main(); sys.exit()
-    
-    opt = CmdLineOptions(sys.argv)
-    main()        
-    sys.exit(0)
+    try: # Import Psyco if available
+        import psyco
+        psyco.full()
+    except ImportError:
+        logging.warning("psyco not available")
+
+
+    if "--gui" in sys.argv:
+        argv = [x for x in sys.argv if x != "--gui"]
+        GtkFrontend(argv).main()
+    else:
+        console_main(sys.argv)
+
