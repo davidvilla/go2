@@ -33,3 +33,7 @@
 
 - Opciones para el .go/config
   --log-level
+
+- GtkUI
+  - doble-click elige una entrada del treeview
+  - el botón "Search" no está activo si no hay patrón
