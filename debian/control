@@ -7,7 +7,7 @@ Standards-Version: 3.7.2
 XS-Python-Version: all
 
 Package: go2
-Architecture: any
+Architecture: all
 Depends: ${python:Depends}
 XB-Python-Version: ${python:Versions}
 Description: Fast directory finder
