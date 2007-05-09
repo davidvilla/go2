@@ -1,0 +1,14 @@
+Changing to: /home/dvilla/repos/web
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "threading.py", line 442, in __bootstrap
+    self.run()
+  File "/usr/lib/go2/go2.py", line 426, in run
+    manager.path_notify(i)
+  File "/usr/lib/go2/go2.py", line 627, in path_notify
+    o.path_update(path)
+  File "/usr/lib/go2/go2.py", line 256, in path_update
+    assert  manager.state == WORKING
+AssertionError
+
+

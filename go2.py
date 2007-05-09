@@ -668,7 +668,6 @@ class Manager:
            
             logging.info("command is: '%s'" % cmdlist)
             os.chdir(self.dirname)
-            print cmdlist
             os.execvp(cmdlist[0], cmdlist)
         else:
             saveTarget(self.dirname)
@@ -878,7 +877,7 @@ class GtkFrontend:
         manager.path_attach(self)
         manager.state_attach(self)
         manager.run()
-        print 'fin de búsqueda'
+        #print 'fin de búsqueda'
 
     def gui_reset(self):
         self.wg_entry.set_text('')
@@ -946,16 +945,14 @@ class GtkFrontend:
         gobject.idle_add(self.offline_path_update, path)
 
     def offline_state_update(self, state):
-        print state
-
         if state == NOTFOUND:
-            print 'NOTFOUND'
+            logging.debug('NOTFOUND')
             self.wg_cancel.set_sensitive(False)
             self.wg_clean.set_sensitive(True)
             self.progressbar_text('Not found')
 
         if state == WAITING:
-            print 'WAITING'
+            logging.debug('WAITING')
             self.wg_search.set_sensitive(True)
             self.wg_cancel.set_sensitive(False)
             self.wg_clean.set_sensitive(True)
@@ -1016,8 +1013,6 @@ if __name__ == '__main__':
         psyco.full()
     except ImportError:
         logging.warning("psyco not available")
-
-    print argv 
 
     if "--gui" in argv:
         GtkFrontend(argv).main()
