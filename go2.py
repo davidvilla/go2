@@ -31,15 +31,14 @@ import logging
 import getopt
 
 os.environ['LANG'] = 'C'
-import gobject, gtk, gtk.glade
-gobject.threads_init()
+
 
 ESC = 27
 ENTER = 13
 
 #FILES
 GO2DIR =     os.path.join(os.environ['HOME'], '.go2')
-GO2EXCLUDE =  os.path.join(GO2DIR, 'exclude')
+GO2EXCLUDE = os.path.join(GO2DIR, 'exclude')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE =   os.path.join(GO2DIR, 'cache')
 GO2CONFIG =  os.path.join(GO2DIR, 'config') 
@@ -149,24 +148,6 @@ class ConsoleUI(threading.Thread):
         self.__index = ord('a')
         manager.state_attach(self)
         manager.path_attach(self)
-
-#    @classmethod
-#    def highlight(self, path):
-#        items = path.split(os.sep)
-#        pattern = cfg.pattern
-#        
-#        p = len(pattern) - 1
-#        for i in range(len(items)-1,-1,-1):
-#            if p < 0: break
-#            if re.match(pattern[p], items[i], cfg.flags):
-#                orig = items[i][:len(pattern[p])]
-#                items[i] = re.sub(orig,
-#                                  self.HIGH + orig + self.LOW,
-#                                  items[i], 1)
-#                p -= 1
-#                
-#        retval = os.sep.join(items)
-#        return retval
 
     def __del__(self):
 	pass #self.ttyrestore()
@@ -859,7 +840,7 @@ class GtkFrontend:
     def main(self):
         gtk.main()
 
-    def all(self):
+    def work(self):
         global manager
 
         try:
@@ -879,15 +860,16 @@ class GtkFrontend:
         manager.run()
         #print 'fin de búsqueda'
 
-    def gui_reset(self):
-        self.wg_entry.set_text('')
+    def gui_reset(self, entry='', progress=''):
+        if entry != None:
+            self.wg_entry.set_text(entry)
         self.wg_entry.grab_focus()
         self.wg_search.set_sensitive(True)
         self.store.clear()
         self.wg_cancel.set_sensitive(False)
         self.wg_clean.set_sensitive(False)
         self.wg_go.set_sensitive(False)
-        self.progressbar_text('')
+        self.progressbar_text(progress)
 
     def gui_working(self):
         def pulse():
@@ -897,6 +879,7 @@ class GtkFrontend:
         self.wg_search.set_sensitive(False)
         self.wg_cancel.set_sensitive(True)
         self.wg_clean.set_sensitive(False)
+        self.wg_go.set_sensitive(False)
         self.source_id = gobject.timeout_add(150, pulse)        
 
     def progressbar_text(self, text):
@@ -910,7 +893,7 @@ class GtkFrontend:
     def on_button_search_clicked(self, wd):
         self.store.clear()
         self.__n = 0
-        thread.start_new_thread(self.all, ())
+        thread.start_new_thread(self.work, ())
 
     def on_button_cancel_clicked(self, wd):
         manager.setElection(None)
@@ -947,9 +930,10 @@ class GtkFrontend:
     def offline_state_update(self, state):
         if state == NOTFOUND:
             logging.debug('NOTFOUND')
-            self.wg_cancel.set_sensitive(False)
-            self.wg_clean.set_sensitive(True)
-            self.progressbar_text('Not found')
+            self.gui_reset(None, 'Not Found')
+            #self.wg_cancel.set_sensitive(False)
+            #self.wg_clean.set_sensitive(True)
+            #self.progressbar_text('Not found')
 
         if state == WAITING:
             logging.debug('WAITING')
@@ -1014,7 +998,15 @@ if __name__ == '__main__':
     except ImportError:
         logging.warning("psyco not available")
 
-    if "--gui" in argv:
+
+    has_DISPLAY = os.environ.has_key("DISPLAY")
+    if not has_DISPLAY:
+        logging.warning("$DISPLAY is not set, using console mode")
+
+    if "--gui" in argv and has_DISPLAY:
+        import gobject
+        import gtk, gtk.glade
+        gobject.threads_init()
         GtkFrontend(argv).main()
     else:
         console_main(argv)
