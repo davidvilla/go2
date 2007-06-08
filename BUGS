@@ -12,3 +12,14 @@ Traceback (most recent call last):
 AssertionError
 
 
+Searching...
+Traceback (most recent call last):
+File "/usr/lib/go2/go2.py", line 1025, in ?
+ console_main(argv)
+ File "/usr/lib/go2/go2.py", line 990, in console_main
+ manager.run()
+ File "/usr/lib/go2/go2.py", line 598, in run
+ self.mainJob()
+ File "/usr/lib/go2/go2.py", line 562, in mainJob
+ dirs = list(set([os.getcwd(), os.environ['HOME']]))
+ OSError: [Errno 2] No such file or directory
