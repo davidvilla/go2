@@ -558,7 +558,7 @@ class Manager:
             
             select.select([],[],[], 0.25)  # espera pasiva
             if time.time() - self.tinit > 5 and not locate_run:
-                logging.info("Arrancando locate.")
+                logging.info("Starting locate")
                 locate_run = True
                 if manager.cfg.locate:
                     w = self.createWorker(LocateWorker)
@@ -660,11 +660,11 @@ def leaveAdvice(*args):
 
 def go2setup():
     if os.system('grep go2.sh ~/.bashrc > /dev/null') == 0:
-        print('go2 was setup before, nothing to do.')
+        print('go2 already configured, skipping.')
         return 1
 
-    os.system('echo "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh" >> ~/.bashrc')
-    print('Setting up go2. It will be usable in next shell session.')
+    os.system('echo "\n[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh" >> ~/.bashrc')
+    print('Setting up go2. It will be ready in next shell session.')
     return 0
 
 
