@@ -760,6 +760,9 @@ class Config:
     def parse_pattern(self):
         if not self.pattern:
             raise self.EmptyPatternException
+
+        if self.pattern[0] == '.':
+            pass
     
         if self.pattern[0] == '..':
             self.parent_mode = True
