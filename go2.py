@@ -268,7 +268,7 @@ class PathList:
         return len(self.data)
 
 
-class pathFile:
+class PathFile:
     "Manage a file which content a path set"
     def __init__(self, filename, size = 100):
         self.data = []
@@ -360,7 +360,7 @@ class HistoryWorker(Worker):
         self.drop = []
 
     def run(self):
-        self.pFile = pathFile(self.fname, 500)
+        self.pFile = PathFile(self.fname, 500)
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
@@ -392,7 +392,7 @@ class CacheWorker(Worker):
         self.drop = []
 
     def run(self):
-        self.pFile = pathFile(self.fname, 1000)
+        self.pFile = PathFile(self.fname, 1000)
         logging.info('cache len:' + str(len(self.pFile.data)))
 
         for i in self.pFile.data:
@@ -670,7 +670,7 @@ def go2setup():
 
 def usage():
     prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
-    date = '$Date: 2007-03-11 17:55:29 +0100 (dom, 11 mar 2007) $'
+    date = '$Date$' 
     version = date[9:17].replace('-','')
     #version = '$Rev: 1931 $'[6:-1]
     print '''%s version 0.%s, Copyright (C) 2004, 2005, 2006 David Villa Alises
@@ -762,13 +762,16 @@ class Config:
             raise self.EmptyPatternException
 
         if self.pattern[0] == '.':
-            pass
+            p = pathFile(GO2HISTORY)
+            p.insert(os.getcwd())
+            p.commit()
+            sys.exit(0)
     
         if self.pattern[0] == '..':
             self.parent_mode = True
             self.pattern = ['']
 
-        self.re_pattern = ['^' + x for x in self.pattern]
+        self.re_pattern = ['^' + x.replace('.', '\.') for x in self.pattern]
 
         if len(self.pattern) > 1:
             self.match_func = match_multi

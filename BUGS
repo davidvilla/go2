@@ -23,3 +23,20 @@ File "/usr/lib/go2/go2.py", line 1025, in ?
  File "/usr/lib/go2/go2.py", line 562, in mainJob
  dirs = list(set([os.getcwd(), os.environ['HOME']]))
  OSError: [Errno 2] No such file or directory
+
+
+
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "threading.py", line 442, in __bootstrap
+    self.run()
+  File "/usr/lib/go2/go2.py", line 312, in run
+    self.do_work()
+  File "/usr/lib/go2/go2.py", line 418, in do_work
+    manager.notify(path=i)
+  File "/usr/lib/go2/go2.py", line 598, in notify
+    for o in self.observers_: o.update(self.state)
+  File "/usr/lib/go2/go2.py", line 431, in update
+    for i in self.drop: self.pFile.data.remove(i)
+ValueError: list.remove(x): x not in list
+
