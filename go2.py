@@ -29,6 +29,7 @@ import string
 import time
 import logging
 import getopt
+import subprocess
 
 os.environ['LANG'] = 'C'
 
@@ -55,21 +56,18 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 
 #-- path checkers
-def not_hidden(path):
-    return not ((os.sep + '.') in path)
-
-def has_dot(path):
+def hidden(path):
     return (os.sep + '.') in path
 
-def is_local(path):
-    return path.startswith(os.environ['HOME'])
+def not_mine(path):
+    return not path.startswith(os.environ['HOME'])
 
 #--
 
 
 
 def filterout_hidden(pathlist):
-    return [x for x in pathlist if not has_dot(x)]
+    return [x for x in pathlist if not hidden(x)]
 
 def match_single(path):
     return re.match(manager.cfg.re_pattern[0],
@@ -128,9 +126,12 @@ class PathAsserts:
 
     def test(self, path):
         for f in self.filters:
-            if not f(path): return False
+            if f(path): return True
 
-        return True
+        return False
+
+    def __call__(self, path):
+        return self.test(path)
         
 
 class ConsoleUI(threading.Thread):
@@ -234,13 +235,13 @@ class ConsoleUI(threading.Thread):
         if self.__matches > self.maxItem:
             raise Manager.FullException
 
-        assert  manager.state == WORKING
+        assert manager.state == WORKING
 
         path = re.sub('^' + os.environ['HOME'], '~',
                       highlight(manager.cfg.pattern,
                                 path, self.HIGH, self.LOW, manager.cfg.flags))
                 
-        print "\r%c: %s" % (chr(self.__index), path)
+        print "\r%c: %s" % (chr(self.__index), path.ljust(16))
         print '\rSearching...',       
         self.__index += 1
 
@@ -283,7 +284,7 @@ class PathFile:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
-        logging.debug("saving to file: %s (%s)" % (item, str(len(self.data))))
+        logging.debug("Saving to file: %s (%s)" % (item, str(len(self.data))))
         if item in self.data: self.data.remove(item)
         self.data = [item] + self.data
 
@@ -300,16 +301,16 @@ class Worker(threading.Thread):
         threading.Thread.__init__(self) #, name = "Worker %d" % self.i)
 #        self.i += 1
         self.root = root
-        self.exclude = exclude
+        self.__exclude = exclude
         self.count = 0
 
-    def not_exclude(self, path):
-        # Comprueba que la ruta absoluta 'path' no está excluida FIXME:
-        # Comprobar también que el nombre de directorio no está excluido
-        # (ej.svn)
-        for p in self.exclude:
-            if path.startswith(p): return False
-        return True
+    def is_excluded(self, path):
+        # Comprueba que la ruta absoluta 'path' no está excluida
+        # FIXME: Comprobar también que el nombre de directorio no está
+        # excluido (ej.svn), es decir, rutas relativas
+        for p in self.__exclude:
+            if path.startswith(p): return True
+        return False
 
 class LocateWorker(Worker):
     "Parse locate output"
@@ -330,12 +331,12 @@ class LocateWorker(Worker):
                                   stderr=subprocess.PIPE,
                                   close_fds=True)
 
-        rules = PathAsserts()
-        if not manager.cfg.process_hidden: rules.add(not_hidden)
-        if not manager.cfg.from_root:      rules.add(is_local)
-        rules.add(os.path.isdir)
-        if self.exclude:           rules.add(self.not_exclude)
-        rules.add(manager.cfg.match_func)
+        exclude = PathAsserts()
+        exclude.add(lambda x: not os.path.isdir(x))
+        if not manager.cfg.process_hidden: exclude.add(hidden)
+        if not manager.cfg.from_root:      exclude.add(not_mine)
+        exclude.add(self.is_excluded)
+        exclude.add(lambda x: not manager.cfg.match_func(x))
 
         for i in locate.stdout:
             if manager.stop.isSet():
@@ -345,8 +346,9 @@ class LocateWorker(Worker):
             i = i.strip('\n')
             logging.debug("locate-> '%s'" % i)
             
-            if not rules.test(i): continue
-            manager.path_notify(i)
+            if exclude(i): continue
+            if manager.cfg.match_func(i):
+                manager.path_notify(i)
 
 
 
@@ -364,16 +366,15 @@ class HistoryWorker(Worker):
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
-            logging.debug ("\r\n-> '%s'" % i)
+            logging.debug ("History -> '%s'" % i)
             if manager.cfg.match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
 
-                logging.debug(" [OK]")
-                manager.path_notify(i)
+                if self.is_excluded(i): continue
 
-            logging.debug("\n")
+                manager.path_notify(i)
 
     def state_update(self, state):
         if state != FINISH: return
@@ -403,10 +404,9 @@ class CacheWorker(Worker):
                     self.drop.append(i)
                     continue
 
-                logging.debug(" [OK]")
-                manager.path_notify(i)
+                if self.is_excluded(i): continue
 
-            logging.debug("\n")
+                manager.path_notify(i)
 
     def path_update(self, path):
         self.pFile.insert(path)
@@ -425,9 +425,9 @@ class DiskWorker(Worker):
 
     def run(self):
 
-        rules = PathAsserts()
-        if not manager.cfg.process_hidden: rules.add(not_hidden)
-        if self.exclude:           rules.add(self.not_exclude)
+        exclude = PathAsserts()
+        if not manager.cfg.process_hidden: exclude.add(hidden)
+        exclude.add(self.is_excluded)
         
         for root, dirs, files in os.walk(self.root):
             if manager.stop.isSet(): return
@@ -439,7 +439,7 @@ class DiskWorker(Worker):
                 path = os.path.join(root, d)
                 #if (d[0] == '.' and not opt.process_hidden) or \
                 #    d in self.exclude or path in self.exclude:
-                if not rules.test(path):
+                if exclude(path):
                     dirs.remove(d)
                     continue
 
@@ -484,7 +484,7 @@ class Manager:
 
         self.cfg = cfg
         self.workers = []
-	self.stop = threading.Event()
+        self.stop = threading.Event()
         self.state = INITIAL
 
         self.tinit = time.time()
@@ -598,6 +598,10 @@ class Manager:
             self.stop.set()
 
     def path_notify(self, path):
+
+        # no listar el directorio actual
+        if path == os.getcwd(): return   
+
         try:
             self.pathList.append(path)
         except PathList.AlreadyExistsException:
@@ -673,7 +677,7 @@ def usage():
     date = '$Date$' 
     version = date[9:17].replace('-','')
     #version = '$Rev: 1931 $'[6:-1]
-    print '''%s version 0.%s, Copyright (C) 2004, 2005, 2006 David Villa Alises
+    print '''%s version 0.%s, Copyright (C) 2007 David Villa Alises
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
 ''' % (prgname, version)
@@ -1016,4 +1020,4 @@ if __name__ == '__main__':
         GtkFrontend(argv).main()
     else:
         console_main(argv)
-
+        
