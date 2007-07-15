@@ -45,7 +45,8 @@ GO2CACHE =   os.path.join(GO2DIR, 'cache')
 GO2CONFIG =  os.path.join(GO2DIR, 'config') 
 GO2TMP =     os.path.join(GO2DIR, 'tmp')
 GO2LOG =     os.path.join(GO2DIR, 'log')
-
+GO2GUI = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
+GO2GUI = '/home/david/repos/go2/trunk/go2.glade2'
 
 # states
 INITIAL,  WORKING, WAITING, CANCELED, \
@@ -53,6 +54,14 @@ NOTFOUND, FINISH,  FULL,    NOTEXIST = range(8)
 
 
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+
+class Singleton(type):
+    def __init__(cls, *args):
+        cls.__instance = None
+    def __call__(cls, *args, **kargs):
+        if not cls.__instance:
+            cls.__instance = type.__call__(cls, *args, **kargs)
+        return cls.__instance
 
 
 #-- path checkers
@@ -70,42 +79,80 @@ def filterout_hidden(pathlist):
     return [x for x in pathlist if not hidden(x)]
 
 def match_single(path):
-    return re.match(manager.cfg.re_pattern[0],
+    if Config().ignorecase:
+        path = path.lower()
+
+    retval = os.path.basename(path).startswith(Config().pattern[0])
+    #if retval:
+    #    print os.path.basename(path)
+    #    print Config().pattern[0]
+    return retval
+
+
+def match_single_re(path):
+    return re.match(Config().re_pattern[0],
                     os.path.basename(path),
-                    manager.cfg.flags)
+                    Config().flags)
 
 def match_multi(path):
+    if Config().ignorecase:
+        path = path.lower()
+    
+    items = path.split(os.sep)[1:]
+    pattern = Config().pattern
+
+    match = items[-1].startswith(pattern[-1])
+    if not match: return False
+
+    p = len(pattern) -2
+    for i in items[-2::-1]:
+        if p < 0: return True
+        if i.startswith(pattern[p]): p -= 1
+
+    return False
+
+
+def match_multi_re(path):
     "path must be a abspath"
 
+    cfg = Config()
     items = path.split(os.sep)[1:]
-    pattern = manager.cfg.re_pattern
+    pattern = cfg.re_pattern
 
-    match = re.match(pattern[-1], items[-1], manager.cfg.flags)
+    match = re.match(pattern[-1], items[-1], cfg.flags)
     if not match: return False
 
     p = len(pattern) - 2
     for i in items[-2::-1]:
         if p < 0: return True
-        if re.match(pattern[p], i, manager.cfg.flags): p -= 1
+        if re.match(pattern[p], i, cfg.flags): p -= 1
 
     return False
 
 
 
 def highlight(pattern, path, before, after, flags=0):
-    items = path.split(os.sep)
+    #print '\rpattern:', pattern
+    #print '\rpath:', path
     
+    items = path.split(os.sep)
+    #items = [re.escape(x) for x in path.split(os.sep)]
+    #print items
+
+#    pattern = [re.escape(x) for x in pattern]
     p = len(pattern) - 1
     for i in range(len(items)-1,-1,-1):
         if p < 0: break
-        if re.match(pattern[p], items[i], flags):
+        if items[i].startswith(pattern[p]):
+        #if re.match(pattern[p], items[i], flags):
             orig = items[i][:len(pattern[p])]
-            items[i] = re.sub(orig,
-                              before + orig + after,
-                              items[i], 1)
+            #print 'orig:', repr(orig)
+            items[i] = items[i].replace(orig,
+                                        before + orig + after, 1)
             p -= 1
             
     retval = os.sep.join(items)
+    #print repr(retval)
     return retval
 
 
@@ -238,8 +285,8 @@ class ConsoleUI(threading.Thread):
         assert manager.state == WORKING
 
         path = re.sub('^' + os.environ['HOME'], '~',
-                      highlight(manager.cfg.pattern,
-                                path, self.HIGH, self.LOW, manager.cfg.flags))
+                      highlight(Config().pattern,
+                                path, self.HIGH, self.LOW, Config().flags))
                 
         print "\r%c: %s" % (chr(self.__index), path.ljust(16))
         print '\rSearching...',       
@@ -280,7 +327,7 @@ class PathFile:
             self.data = [x.strip('\n') for x in fd.readlines()]
             fd.close()
 
-        if not manager.cfg.process_hidden:
+        if not Config().process_hidden:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
@@ -320,9 +367,9 @@ class LocateWorker(Worker):
         
     def run(self):
         options = '-l 1000 -e -b '
-        if manager.cfg.flags | re.IGNORECASE:
+        if Config().flags | re.IGNORECASE:
             options += '-i '
-        cmd = 'locate %s %s' % (options, manager.cfg.pattern[0])
+        cmd = 'locate %s %s' % (options, Config().pattern[0])
         logging.info('locate cmd: %s' % cmd)
 
         # FIXME: puede que locate no exista
@@ -333,10 +380,10 @@ class LocateWorker(Worker):
 
         exclude = PathAsserts()
         exclude.add(lambda x: not os.path.isdir(x))
-        if not manager.cfg.process_hidden: exclude.add(hidden)
-        if not manager.cfg.from_root:      exclude.add(not_mine)
+        if not Config().process_hidden: exclude.add(hidden)
+        if not Config().from_root:      exclude.add(not_mine)
         exclude.add(self.is_excluded)
-        exclude.add(lambda x: not manager.cfg.match_func(x))
+        exclude.add(lambda x: not Config().match_func(x))
 
         for i in locate.stdout:
             if manager.stop.isSet():
@@ -347,7 +394,7 @@ class LocateWorker(Worker):
             logging.debug("locate-> '%s'" % i)
             
             if exclude(i): continue
-            if manager.cfg.match_func(i):
+            if Config().match_func(i):
                 manager.path_notify(i)
 
 
@@ -367,7 +414,7 @@ class HistoryWorker(Worker):
             if manager.stop.isSet(): return
 
             logging.debug ("History -> '%s'" % i)
-            if manager.cfg.match_func(i):
+            if Config().match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -399,7 +446,7 @@ class CacheWorker(Worker):
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
-            if manager.cfg.match_func(i):
+            if Config().match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -426,7 +473,7 @@ class DiskWorker(Worker):
     def run(self):
 
         exclude = PathAsserts()
-        if not manager.cfg.process_hidden: exclude.add(hidden)
+        if not Config().process_hidden: exclude.add(hidden)
         exclude.add(self.is_excluded)
         
         for root, dirs, files in os.walk(self.root):
@@ -447,10 +494,10 @@ class DiskWorker(Worker):
                 #if os.path.basename(path) == "repos":
                 #    print 'SINGLE', path
 
-                if manager.cfg.match_func(path):
+                if Config().match_func(path):
                     manager.path_notify(path)
                     self.count += 1
-                elif manager.cfg.match_func == match_multi and match_single(path):
+                elif Config().match_func == match_multi and match_single(path):
                     manager.createWorker(DiskWorker, path)
                     dirs.remove(d)
 
@@ -467,22 +514,22 @@ class ParentWorker(Worker):
             manager.path_notify(path)
 
 
-class Manager:
+class Manager(object):
 
     class FullException: pass
 
-    def __init__(self, cfg):
+    def __init__(self):
         self.pathList = PathList()
         self.__observers = []
         self.__state_observers = []
         self.__path_observers = []
+        self.cfg = Config()
         
-        if cfg.parent_mode:
+        if self.cfg.parent_mode:
             self.mainJob = self.parentMode_job
-        elif cfg.history_mode:
+        elif self.cfg.history_mode:
             self.mainJob = self.historyMode_job
 
-        self.cfg = cfg
         self.workers = []
         self.stop = threading.Event()
         self.state = INITIAL
@@ -534,8 +581,8 @@ class Manager:
         if w: w.join(1)
 
         # si el patrón es el nombre de un subdirectorio de pwd
-        if len(manager.cfg.pattern) == 1 and os.path.isdir(manager.cfg.pattern[0]):
-            self.path_notify(os.path.abspath(manager.cfg.pattern[0]))
+        if len(self.cfg.pattern) == 1 and os.path.isdir(self.cfg.pattern[0]):
+            self.path_notify(os.path.abspath(self.cfg.pattern[0]))
 
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
@@ -543,7 +590,7 @@ class Manager:
         dirs = list(set([os.getcwd(), os.environ['HOME']]))
         #dirs = list(set([os.getcwd()]))
 
-        if manager.cfg.from_root:
+        if self.cfg.from_root:
             dirs.append('/')
 
         for target in dirs:
@@ -560,7 +607,7 @@ class Manager:
             if time.time() - self.tinit > 5 and not locate_run:
                 logging.info("Starting locate")
                 locate_run = True
-                if manager.cfg.locate:
+                if self.cfg.locate:
                     w = self.createWorker(LocateWorker)
                 
 
@@ -687,7 +734,7 @@ welcome to redistribute it under certain conditions; See COPYING for details.
 options:
   -i            ignore case
   -r            search in whole file system
-  -d            search into dot(hidden) folders
+  -d            search into dot(hidden) folders also
   -H            list the history
   --gui         run in GUI mode
   --cmd <cmd>   exec this command instead of \'chdir\'
@@ -699,16 +746,18 @@ options:
 
 ################################
 
+class Config(object):
 
-class Config:
+    __metaclass__ = Singleton
 
     class EmptyPatternException: pass
     class NoValidPatternException: pass
     
-    def __init__(self, argv):
+    def __init__(self, argv=[]):
         self.history_mode = False
         self.parent_mode = False
         self.from_root = False
+        self.ignorecase = False
         self.process_hidden = False
         self.locate = True
         self.flags = 0
@@ -738,6 +787,7 @@ class Config:
 
         for o, a in opts:
             if o == '-i':
+                self.ignorecase = True
                 self.flags |= re.IGNORECASE
             if o == '-r':
                 self.from_root = True
@@ -745,7 +795,7 @@ class Config:
                 self.process_hidden = True
             if o == '-H':
                 self.history_mode = True
-                self.re_pattern =self.pattern = ['']    # hack para que todos hagan matching
+                self.pattern = ['']    # hack para que todos hagan matching
                 return
             if o == '--no-locate':
                 self.locate = False
@@ -775,13 +825,15 @@ class Config:
             self.parent_mode = True
             self.pattern = ['']
 
-        self.re_pattern = ['^' + x.replace('.', '\.') for x in self.pattern]
+        if self.ignorecase:
+            self.pattern = [x.lower() for x in self.pattern]
 
         if len(self.pattern) > 1:
             self.match_func = match_multi
 
         try:
-            re.match(self.re_pattern[0], '', self.flags)
+            pass
+            #re.match(self.re_pattern[0], '', self.flags)
         except re.error:
             raise self.NoValidPatternException
 
@@ -791,31 +843,26 @@ class Config:
 class GtkFrontend:
     def __init__(self, argv):
         self.argv = argv
-        self.cfg = Config(argv)
+        cfg = Config(argv)
         
-        self.glade = gtk.glade.XML(os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2'))
+        self.glade = gtk.glade.XML(GO2GUI)
         self.glade.signal_autoconnect(self)
 
-        self.window = self.glade.get_widget('window')
-        self.wg_entry = self.glade.get_widget('entry')
-        self.wg_search = self.glade.get_widget('button_search')
-        self.wg_cancel =  self.glade.get_widget('button_cancel')
-        self.wg_clean =  self.glade.get_widget('button_clean')
-        self.wg_go = self.glade.get_widget('button_go')
-        self.wg_progressbar = self.glade.get_widget('progressbar')
-
         # load cmdline config
-        if self.cfg.pattern:
-            self.wg_entry.set_text(' '.join(self.cfg.pattern))
+        if cfg.pattern:
+            self.wg_entry.set_text(' '.join(cfg.pattern))
+
+        cmds = ['gnome-terminal', 'nautilus %d', 'cd']
+        combo_model = self.wg_combo_cmd.get_model()
+        for c in cmds:
+            combo_model.append([c])
         
-        combo = self.glade.get_widget('combo_cmd')
-        if self.cfg.cmd:
-            combo.child.set_text(self.cfg.cmd)
+        if cfg.cmd:
+            self.wg_combo_cmd.child.set_text(cfg.cmd)
         else:
-            combo.child.set_text(combo.get_model()[0][0])
+            self.wg_combo_cmd.child.set_text(combo_model[0][0])
 
         # setup treeview
-        self.wg_treeview = self.glade.get_widget('treeview')
         self.store = gtk.ListStore(str, int)
         self.wg_treeview.set_model(self.store)
 
@@ -830,22 +877,37 @@ class GtkFrontend:
         self.__n = 0
         self.source_id = None
 
+
+    def __getattr__(self, name):
+        "get widget if attribute starts with 'wg_'"
+        if not name.startswith('wg_'):
+            raise AttributeError("'%s' isn't a widget" % name)
+      
+        widget = self.glade.get_widget(name[3:])
+        if widget == None:
+            raise AttributeError("Widget '%s' not found" % name)
+
+        self.__dict__[name] = widget
+        return widget
+        
+
     def config(self):
-        self.cfg.pattern = self.glade.get_widget('entry').get_text().split()
-        self.cfg.parse_pattern()
+        cfg = Config()
+        cfg.pattern = self.wg_entry.get_text().split()
+        cfg.parse_pattern()
 
         # switches
-        self.cfg.from_root = self.glade.get_widget('checkbutton_root').get_active()
-        if self.glade.get_widget('checkbutton_case').get_active():
-            self.cfg.flags |= re.IGNORECASE
+        cfg.from_root = self.wg_checkbutton_root.get_active()
+        if self.wg_checkbutton_case.get_active():
+            cfg.flags |= re.IGNORECASE
         else:
-            self.cfg.flags &= ~ re.IGNORECASE
+            cfg.flags &= ~ re.IGNORECASE
 
-        self.cfg.process_hidden = not self.glade.get_widget('checkbutton_hidden').get_active()
+        cfg.process_hidden = not self.wg_checkbutton_hidden.get_active()
 
-        self.cfg.cmd = self.glade.get_widget('combo_cmd').child.get_text().strip()
-        if self.cfg.cmd == 'chdir':
-            self.cfg.cmd = None
+        cfg.cmd = self.wg_combo_cmd.child.get_text().strip()
+        if cfg.cmd == 'chdir':
+            cfg.cmd = None
 
     def main(self):
         gtk.main()
@@ -863,22 +925,26 @@ class GtkFrontend:
             logging.debug('Falta diálogo de error, no válido')
             return
 
-        gobject.idle_add(self.gui_working)
-        manager = Manager(self.cfg)
-        manager.path_attach(self)
-        manager.state_attach(self)
-        manager.run()
+        try:
+            gobject.idle_add(self.gui_working)
+            manager = Manager()
+            manager.path_attach(self)
+            manager.state_attach(self)
+            manager.run()
+        except AttributeError, e:
+            print e
+            
         #print 'fin de búsqueda'
 
     def gui_reset(self, entry='', progress=''):
         if entry != None:
             self.wg_entry.set_text(entry)
         self.wg_entry.grab_focus()
-        self.wg_search.set_sensitive(True)
+        self.wg_button_search.set_sensitive(True)
         self.store.clear()
-        self.wg_cancel.set_sensitive(False)
-        self.wg_clean.set_sensitive(False)
-        self.wg_go.set_sensitive(False)
+        self.wg_button_cancel.set_sensitive(False)
+        self.wg_button_clean.set_sensitive(False)
+        self.wg_button_go.set_sensitive(False)
         self.progressbar_text(progress)
 
     def gui_working(self):
@@ -886,10 +952,10 @@ class GtkFrontend:
             self.wg_progressbar.pulse()
             return True
 
-        self.wg_search.set_sensitive(False)
-        self.wg_cancel.set_sensitive(True)
-        self.wg_clean.set_sensitive(False)
-        self.wg_go.set_sensitive(False)
+        self.wg_button_search.set_sensitive(False)
+        self.wg_button_cancel.set_sensitive(True)
+        self.wg_button_clean.set_sensitive(False)
+        self.wg_button_go.set_sensitive(False)
         self.source_id = gobject.timeout_add(150, pulse)        
 
     def progressbar_text(self, text):
@@ -904,6 +970,7 @@ class GtkFrontend:
         self.store.clear()
         self.__n = 0
         thread.start_new_thread(self.work, ())
+        #self.work()
 
     def on_button_cancel_clicked(self, wd):
         manager.setElection(None)
@@ -921,14 +988,14 @@ class GtkFrontend:
 
     def offline_path_update(self, path):
         tagged_path = re.sub('^' + os.environ['HOME'], '~',
-                             highlight(self.cfg.pattern,
+                             highlight(Config().pattern,
                                        path, '<b>', '</b>',
-                                       self.cfg.flags))
+                                       Config().flags))
 
         self.store.append([tagged_path, self.__n])
 
         if self.__n == 0:
-            self.wg_go.set_sensitive(True)
+            self.wg_button_go.set_sensitive(True)
             self.wg_treeview.grab_focus()
         
         self.__n += 1
@@ -947,9 +1014,9 @@ class GtkFrontend:
 
         if state == WAITING:
             logging.debug('WAITING')
-            self.wg_search.set_sensitive(True)
-            self.wg_cancel.set_sensitive(False)
-            self.wg_clean.set_sensitive(True)
+            self.wg_button_search.set_sensitive(True)
+            self.wg_button_cancel.set_sensitive(False)
+            self.wg_button_clean.set_sensitive(True)
             self.progressbar_text('Ready: %d matches' % len(manager.pathList))
 
         if state == CANCELED:
@@ -965,9 +1032,8 @@ class GtkFrontend:
 def console_main(argv):
     global manager
 
-    cfg = Config(argv)
     try:
-        cfg.parse_pattern()
+        Config(argv).parse_pattern()
     except Config.EmptyPatternException:
         sys.exit(usage())
     except Config.NoValidPatternException:
@@ -975,7 +1041,7 @@ def console_main(argv):
         sys.exit(1)
 
         
-    manager = Manager(cfg)
+    manager = Manager()
     R = ConsoleUI()
     R.start()
     manager.run()
@@ -984,6 +1050,7 @@ def console_main(argv):
 
 
 if __name__ == '__main__':
+
     argv = sys.argv[:]
     if os.path.exists(GO2CONFIG):
         argv[1:1]  = file(GO2CONFIG).read().split()
