@@ -27,7 +27,7 @@ import subprocess
 import signal
 import string
 import time
-import logging
+import logging as log
 import getopt
 import subprocess
 
@@ -46,7 +46,7 @@ GO2CONFIG =  os.path.join(GO2DIR, 'config')
 GO2TMP =     os.path.join(GO2DIR, 'tmp')
 GO2LOG =     os.path.join(GO2DIR, 'log')
 GO2GUI = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
-GO2GUI = '/home/david/repos/go2/trunk/go2.glade2'
+#GO2GUI = os.environ['HOME'] + '/repos/go2/trunk/go2.glade2'
 
 # states
 INITIAL,  WORKING, WAITING, CANCELED, \
@@ -97,14 +97,14 @@ def match_single_re(path):
 def match_multi(path):
     if Config().ignorecase:
         path = path.lower()
-    
-    items = path.split(os.sep)[1:]
+
     pattern = Config().pattern
+    items = path.split(os.sep)[1:]
 
     match = items[-1].startswith(pattern[-1])
     if not match: return False
 
-    p = len(pattern) -2
+    p = len(pattern) - 2
     for i in items[-2::-1]:
         if p < 0: return True
         if i.startswith(pattern[p]): p -= 1
@@ -249,10 +249,10 @@ class ConsoleUI(threading.Thread):
 	elif state == CANCELED:
 	    print '\rCanceled by user'
 	elif state == NOTFOUND:
-            logging.info("Pattern doesn't match")
+            log.info("Pattern doesn't match")
 	    print "\rPattern doesn't match\r"
 	elif state == FULL:
-            logging.warning('Warning: Too many matches')
+            log.warning('Warning: Too many matches')
 	    print '\rWarning: Too many matches!'
 	elif state == FINISH:
 	    print "\rChanging to: %s%s%s" % \
@@ -284,9 +284,12 @@ class ConsoleUI(threading.Thread):
 
         assert manager.state == WORKING
 
-        path = re.sub('^' + os.environ['HOME'], '~',
-                      highlight(Config().pattern,
-                                path, self.HIGH, self.LOW, Config().flags))
+#        path = re.sub('^' + os.environ['HOME'], '~',
+#                      highlight(Config().pattern,
+#                                path, self.HIGH, self.LOW, Config().flags))
+#
+        path = highlight(Config().pattern, path, self.HIGH, self.LOW).\
+               replace(os.environ['HOME'], '~')
                 
         print "\r%c: %s" % (chr(self.__index), path.ljust(16))
         print '\rSearching...',       
@@ -304,7 +307,7 @@ class PathList:
         if item in self.data:
             raise self.AlreadyExistsException
 
-        logging.debug("PathList[%s]: %s" % (len(self), item))
+        log.debug("PathList[%s]: %s" % (len(self), item))
         self.lock.acquire()
         self.data.append(item)
         self.lock.release()
@@ -331,7 +334,8 @@ class PathFile:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
-        logging.debug("Saving to file: %s (%s)" % (item, str(len(self.data))))
+        log.debug("   Saving to file: %s (%s)" % (item,
+                                                      str(len(self.data))))
         if item in self.data: self.data.remove(item)
         self.data = [item] + self.data
 
@@ -363,14 +367,14 @@ class LocateWorker(Worker):
     "Parse locate output"
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        logging.info("New LocateWorker")
+        log.debug("[New LocateWorker]")
         
     def run(self):
         options = '-l 1000 -e -b '
-        if Config().flags | re.IGNORECASE:
+        if Config().ignorecase:
             options += '-i '
         cmd = 'locate %s %s' % (options, Config().pattern[0])
-        logging.info('locate cmd: %s' % cmd)
+        log.debug('locate cmd: %s' % cmd)
 
         # FIXME: puede que locate no exista
         locate = subprocess.Popen(cmd, shell=True,
@@ -391,7 +395,7 @@ class LocateWorker(Worker):
                 return
 
             i = i.strip('\n')
-            logging.debug("locate-> '%s'" % i)
+            log.debug("Locate: '%s'" % i)
             
             if exclude(i): continue
             if Config().match_func(i):
@@ -404,17 +408,18 @@ class HistoryWorker(Worker):
 
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        logging.info("New HistoryWorker")        
         self.fname = kargs['fname']
         self.drop = []
+        self.pFile = PathFile(self.fname, 500)
+        log.debug("[New HistoryWorker, len:%s]" % len(self.pFile.data))
 
     def run(self):
-        self.pFile = PathFile(self.fname, 500)
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
-            logging.debug ("History -> '%s'" % i)
+            log.debug ("History: '%s'" % i)
             if Config().match_func(i):
+                
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -435,13 +440,12 @@ class CacheWorker(Worker):
 
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        logging.info("New CacheWorker")
         self.fname = kargs['fname']
         self.drop = []
+        self.pFile = PathFile(self.fname, 1000)
+        log.debug("[New CacheWorker, len:%s]" % len(self.pFile.data))
 
     def run(self):
-        self.pFile = PathFile(self.fname, 1000)
-        logging.info('cache len:' + str(len(self.pFile.data)))
 
         for i in self.pFile.data:
             if manager.stop.isSet(): return
@@ -468,7 +472,7 @@ class DiskWorker(Worker):
 
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        logging.info("[%s] New DiskWorker for '%s'" % (id(self), self.root))
+        log.debug("[New DiskWorker (%s) for '%s']" % (id(self), self.root))
 
     def run(self):
 
@@ -494,12 +498,23 @@ class DiskWorker(Worker):
                 #if os.path.basename(path) == "repos":
                 #    print 'SINGLE', path
 
+                #print Config().match_func
+                #print Config().match_func(path) 
                 if Config().match_func(path):
                     manager.path_notify(path)
                     self.count += 1
-                elif Config().match_func == match_multi and match_single(path):
-                    manager.createWorker(DiskWorker, path)
-                    dirs.remove(d)
+                else:
+                    log.info(path + '  ' + os.path.split(path)[-1])
+                    #if os.path.split(path)[-1] == 'repos':
+                    #    log.info(Config().pattern)
+                    #    log.info(Config().match_func)
+                    #    log.info(match_single(path))
+                    #    log.info(path)
+                    #    log.info('--<<<<<<<<<<<<<<<')
+                    if Config().pattern > 1 and match_single(path):
+                        log.info('NUEVO WORKER')
+                        manager.createWorker(DiskWorker, path)
+                        dirs.remove(d)
 
 
 class ParentWorker(Worker):
@@ -524,6 +539,7 @@ class Manager(object):
         self.__state_observers = []
         self.__path_observers = []
         self.cfg = Config()
+        self.exclude = self.cfg.exclude[:]
         
         if self.cfg.parent_mode:
             self.mainJob = self.parentMode_job
@@ -541,7 +557,7 @@ class Manager(object):
 
         if root:
             exclude_cp = [x for x in self.cfg.exclude if not root.startswith(x)]
-            self.cfg.exclude.append(root)
+            self.exclude.append(root)
         else:
             exclude_cp = self.cfg.exclude[:]
 
@@ -561,7 +577,7 @@ class Manager(object):
         self.createWorker(ParentWorker)
 
     def historyMode_job(self):
-        logging.info('go2: history mode')
+        log.info('go2: history mode')
         self.state_notify(WORKING)
         self.createWorker(HistoryWorker, fname = GO2HISTORY)
 
@@ -605,7 +621,7 @@ class Manager(object):
             
             select.select([],[],[], 0.25)  # espera pasiva
             if time.time() - self.tinit > 5 and not locate_run:
-                logging.info("Starting locate")
+                log.debug("Starting locate")
                 locate_run = True
                 if self.cfg.locate:
                     w = self.createWorker(LocateWorker)
@@ -620,7 +636,8 @@ class Manager(object):
         self.state_notify(WAITING)
 
         for w in self.workers:
-            logging.info("%s %s" % (id(w), w.count))
+            log.debug("worker %s (%s) found %s" % \
+                          (id(w), w.__class__.__name__.ljust(13), w.count))
 
     def run(self):
         self.mainJob()
@@ -698,7 +715,7 @@ class Manager(object):
                     aux = cmdlist[i].replace('%d', '%s')
                     cmdlist[i] = aux % self.dirname
            
-            logging.info("command is: '%s'" % cmdlist)
+            log.info("command is: '%s'" % cmdlist)
             os.chdir(self.dirname)
             os.execvp(cmdlist[0], cmdlist)
         else:
@@ -708,6 +725,8 @@ class Manager(object):
 def leaveAdvice(*args):
     print '\rWarning: Ctrl-C ignored, to abort press ESC.'
 
+def break_handler(*args):
+    print args
 
 def go2setup():
     if os.system('grep go2.sh ~/.bashrc > /dev/null') == 0:
@@ -760,7 +779,6 @@ class Config(object):
         self.ignorecase = False
         self.process_hidden = False
         self.locate = True
-        self.flags = 0
         self.match_func = match_single
         self.pattern = None
         self.exclude = []
@@ -776,11 +794,12 @@ class Config(object):
             self.exclude.extend([i for i in lines if i]) 
             fd.close()
 
-        if self.exclude: logging.debug('exclude: %s' % self.exclude)
+        if self.exclude: log.debug('exclude: %s' % self.exclude)
        
         try:
             opts, self.pattern = getopt.getopt(argv[1:], 'Hird',
-                                               ['setup','no-locate', 'log', 'gui',
+                                               ['setup','no-locate', 'log',
+                                                'debug', 'gui', 
                                                 'cmd=', 'dir='])
         except getopt.GetoptError:
             sys.exit(usage())
@@ -788,7 +807,6 @@ class Config(object):
         for o, a in opts:
             if o == '-i':
                 self.ignorecase = True
-                self.flags |= re.IGNORECASE
             if o == '-r':
                 self.from_root = True
             if o == '-d':
@@ -808,7 +826,7 @@ class Config(object):
                 elif os.path.isfile(a):
                     dirname = os.path.split(a)[0]
                 else: continue
-                logging.debug('dir:  ' + dirname)
+                log.debug('dir:  ' + dirname)
                 os.chdir(dirname)
 
     def parse_pattern(self):
@@ -898,10 +916,7 @@ class GtkFrontend:
 
         # switches
         cfg.from_root = self.wg_checkbutton_root.get_active()
-        if self.wg_checkbutton_case.get_active():
-            cfg.flags |= re.IGNORECASE
-        else:
-            cfg.flags &= ~ re.IGNORECASE
+        cfg.ignorecase = self.wg_checkbutton_case.get_active()
 
         cfg.process_hidden = not self.wg_checkbutton_hidden.get_active()
 
@@ -918,11 +933,11 @@ class GtkFrontend:
         try:
             self.config()
         except Config.EmptyPatternException:
-            logging.debug('Falta diálogo de error, vacio')
+            log.debug('Falta diálogo de error, vacio')
             gobject.idle_add(self.gui_reset)
             return
         except Config.NoValidPatternException:
-            logging.debug('Falta diálogo de error, no válido')
+            log.debug('Falta diálogo de error, no válido')
             return
 
         try:
@@ -987,10 +1002,8 @@ class GtkFrontend:
         gtk.main_quit()
 
     def offline_path_update(self, path):
-        tagged_path = re.sub('^' + os.environ['HOME'], '~',
-                             highlight(Config().pattern,
-                                       path, '<b>', '</b>',
-                                       Config().flags))
+        tagged_path = highlight(Config().pattern, path, '<b>', '</b>').\
+                      replace(os.environ['HOME'], '~')
 
         self.store.append([tagged_path, self.__n])
 
@@ -1006,14 +1019,11 @@ class GtkFrontend:
 
     def offline_state_update(self, state):
         if state == NOTFOUND:
-            logging.debug('NOTFOUND')
+            log.debug('NOTFOUND')
             self.gui_reset(None, 'Not Found')
-            #self.wg_cancel.set_sensitive(False)
-            #self.wg_clean.set_sensitive(True)
-            #self.progressbar_text('Not found')
 
         if state == WAITING:
-            logging.debug('WAITING')
+            log.debug('WAITING')
             self.wg_button_search.set_sensitive(True)
             self.wg_button_cancel.set_sensitive(False)
             self.wg_button_clean.set_sensitive(True)
@@ -1043,6 +1053,11 @@ def console_main(argv):
         
     manager = Manager()
     R = ConsoleUI()
+
+    #signal.signal(signal.SIGQUIT, leaveAdvice)
+    #signal.signal(signal.SIGINT, leaveAdvice)
+    #signal.signal(signal.SIGTERM, leaveAdvice)
+    
     R.start()
     manager.run()
     R.join()
@@ -1055,30 +1070,34 @@ if __name__ == '__main__':
     if os.path.exists(GO2CONFIG):
         argv[1:1]  = file(GO2CONFIG).read().split()
 
-    if '--log' in argv:
-        logging.basicConfig(level=logging.DEBUG,
+    if '--log' in argv or '--debug' in argv:
+        log.basicConfig(level=log.DEBUG,
                             format='%(asctime)s %(levelname)-8s %(message)s',
                             filename=GO2LOG)
+
+    if '--debug' in argv:
+        console = log.StreamHandler()
+        console.setLevel(log.DEBUG)
+        formatter = log.Formatter('\r%(levelname)-8s %(message)s')
+        console.setFormatter(formatter)
+        log.getLogger('').addHandler(console)
+        
     else:
-        logging.getLogger().setLevel(logging.CRITICAL)
+        log.getLogger().setLevel(log.CRITICAL)
 
     
-    logging.info("---------- [go2 '%s']" % sys.argv[1:])
-
-    #signal.signal(signal.SIGQUIT, leaveAdvice)
-    #signal.signal(signal.SIGINT, leaveAdvice)
-    #signal.signal(signal.SIGTERM, leaveAdvice)
+    log.info("---------- [go2 '%s']" % sys.argv[1:])
 
     try: # Import Psyco if available
         import psyco
         psyco.full()
     except ImportError:
-        logging.warning("psyco not available")
+        log.warning("psyco not available")
 
 
     has_DISPLAY = os.environ.has_key("DISPLAY")
     if not has_DISPLAY:
-        logging.warning("$DISPLAY is not set, using console mode")
+        log.warning("$DISPLAY is not set, using console mode")
 
     if "--gui" in argv and has_DISPLAY:
         import gobject
@@ -1087,4 +1106,3 @@ if __name__ == '__main__':
         GtkFrontend(argv).main()
     else:
         console_main(argv)
-        
