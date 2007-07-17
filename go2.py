@@ -73,8 +73,6 @@ def not_mine(path):
 
 #--
 
-
-
 def filterout_hidden(pathlist):
     return [x for x in pathlist if not hidden(x)]
 
@@ -82,17 +80,7 @@ def match_single(path):
     if Config().ignorecase:
         path = path.lower()
 
-    retval = os.path.basename(path).startswith(Config().pattern[0])
-    #if retval:
-    #    print os.path.basename(path)
-    #    print Config().pattern[0]
-    return retval
-
-
-def match_single_re(path):
-    return re.match(Config().re_pattern[0],
-                    os.path.basename(path),
-                    Config().flags)
+    return os.path.basename(path).startswith(Config().pattern[0])
 
 def match_multi(path):
     if Config().ignorecase:
@@ -112,48 +100,19 @@ def match_multi(path):
     return False
 
 
-def match_multi_re(path):
-    "path must be a abspath"
-
-    cfg = Config()
-    items = path.split(os.sep)[1:]
-    pattern = cfg.re_pattern
-
-    match = re.match(pattern[-1], items[-1], cfg.flags)
-    if not match: return False
-
-    p = len(pattern) - 2
-    for i in items[-2::-1]:
-        if p < 0: return True
-        if re.match(pattern[p], i, cfg.flags): p -= 1
-
-    return False
-
-
-
 def highlight(pattern, path, before, after, flags=0):
-    #print '\rpattern:', pattern
-    #print '\rpath:', path
-    
     items = path.split(os.sep)
-    #items = [re.escape(x) for x in path.split(os.sep)]
-    #print items
 
-#    pattern = [re.escape(x) for x in pattern]
     p = len(pattern) - 1
     for i in range(len(items)-1,-1,-1):
         if p < 0: break
         if items[i].startswith(pattern[p]):
-        #if re.match(pattern[p], items[i], flags):
             orig = items[i][:len(pattern[p])]
-            #print 'orig:', repr(orig)
             items[i] = items[i].replace(orig,
                                         before + orig + after, 1)
             p -= 1
             
-    retval = os.sep.join(items)
-    #print repr(retval)
-    return retval
+    return os.sep.join(items)
 
 
 # write selected dirname to file 
@@ -260,19 +219,6 @@ class ConsoleUI(threading.Thread):
 	elif state == WORKING:
             print '\rSearching...',
             return
-#	    newSize = len(manager.pathList)
-#            for path in manager.pathList[self.__last:newSize]:
-#                
-#                # usar string.replace en lugar de re.sub??
-#		path = re.sub('^' + os.environ['HOME'], '~',
-#                              self.highlight(path))
-#                
-#		print "\r%c: %s" % (chr(self.__index),
-#                                    path)
-#                self.__index += 1
-#
-#            print '\rSearching...',
-#            self.__last = newSize
 	else:
 	    print "\rInternal ERROR: unknown state '%d'\n" % state
 
@@ -284,10 +230,6 @@ class ConsoleUI(threading.Thread):
 
         assert manager.state == WORKING
 
-#        path = re.sub('^' + os.environ['HOME'], '~',
-#                      highlight(Config().pattern,
-#                                path, self.HIGH, self.LOW, Config().flags))
-#
         path = highlight(Config().pattern, path, self.HIGH, self.LOW).\
                replace(os.environ['HOME'], '~')
                 
@@ -486,35 +428,19 @@ class DiskWorker(Worker):
             if len(dirs) == 0: continue
 
             for d in list(dirs):
-                #print d
                 path = os.path.join(root, d)
-                #if (d[0] == '.' and not opt.process_hidden) or \
-                #    d in self.exclude or path in self.exclude:
+
                 if exclude(path):
                     dirs.remove(d)
                     continue
 
-                #print '\r\n', os.path.basename(path), path,
-                #if os.path.basename(path) == "repos":
-                #    print 'SINGLE', path
-
-                #print Config().match_func
-                #print Config().match_func(path) 
                 if Config().match_func(path):
                     manager.path_notify(path)
                     self.count += 1
-                else:
-                    log.info(path + '  ' + os.path.split(path)[-1])
-                    #if os.path.split(path)[-1] == 'repos':
-                    #    log.info(Config().pattern)
-                    #    log.info(Config().match_func)
-                    #    log.info(match_single(path))
-                    #    log.info(path)
-                    #    log.info('--<<<<<<<<<<<<<<<')
-                    if Config().pattern > 1 and match_single(path):
-                        log.info('NUEVO WORKER')
-                        manager.createWorker(DiskWorker, path)
-                        dirs.remove(d)
+                elif Config().pattern > 1 and match_single(path):
+                    log.info('NUEVO WORKER')
+                    manager.createWorker(DiskWorker, path)
+                    dirs.remove(d)
 
 
 class ParentWorker(Worker):
@@ -742,7 +668,6 @@ def usage():
     prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
     date = '$Date$' 
     version = date[9:17].replace('-','')
-    #version = '$Rev: 1931 $'[6:-1]
     print '''%s version 0.%s, Copyright (C) 2007 David Villa Alises
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
@@ -849,13 +774,6 @@ class Config(object):
         if len(self.pattern) > 1:
             self.match_func = match_multi
 
-        try:
-            pass
-            #re.match(self.re_pattern[0], '', self.flags)
-        except re.error:
-            raise self.NoValidPatternException
-
-
         
 
 class GtkFrontend:
@@ -948,8 +866,7 @@ class GtkFrontend:
             manager.run()
         except AttributeError, e:
             print e
-            
-        #print 'fin de búsqueda'
+
 
     def gui_reset(self, entry='', progress=''):
         if entry != None:
@@ -985,7 +902,6 @@ class GtkFrontend:
         self.store.clear()
         self.__n = 0
         thread.start_new_thread(self.work, ())
-        #self.work()
 
     def on_button_cancel_clicked(self, wd):
         manager.setElection(None)
@@ -1093,7 +1009,6 @@ if __name__ == '__main__':
         psyco.full()
     except ImportError:
         log.warning("psyco not available")
-
 
     has_DISPLAY = os.environ.has_key("DISPLAY")
     if not has_DISPLAY:
