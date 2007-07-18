@@ -668,22 +668,23 @@ def usage():
     prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
     date = '$Date$' 
     version = date[9:17].replace('-','')
-    print '''%s version 0.%s, Copyright (C) 2007 David Villa Alises
+    print 'go2 is a fast directory finder.'
+    print '''This is version 0.%s, Copyright (C) 2007 David Villa Alises
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
-''' % (prgname, version)
+''' % (version)
 
     print 'Usage: %s [options] <pattern>' % prgname
-    print '''
+    print """
 options:
-  -i            ignore case
-  -r            search in whole file system
-  -d            search into dot(hidden) folders also
-  -H            list the history
-  --gui         run in GUI mode
-  --cmd <cmd>   exec this command instead of \'chdir\'
-  --dir <dir>   search from this directory
-'''
+  -i            ignore case                      (default: case sensitive)
+  -r            search in whole file system      (default: $HOME only)
+  -d            search into hidden directories   (default: not hidden)
+  -H            list history
+  --gui         GUI mode
+  --cmd <cmd>   exec 'cmd'                       (default: chdir)
+  --dir <dir>   search from 'dir' directory      (default: current)
+"""
     return 1
 
 
