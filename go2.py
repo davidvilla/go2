@@ -1,4 +1,4 @@
-#! /usr/bin/python2.4 -u
+#! /usr/bin/python -u
 # -*- coding: utf-8 -*-
 
 # go2.py
@@ -27,9 +27,9 @@ import subprocess
 import signal
 import string
 import time
-import logging as log
+import logging
 import getopt
-import subprocess
+import itertools
 
 os.environ['LANG'] = 'C'
 
@@ -49,8 +49,8 @@ GO2GUI = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
 #GO2GUI = os.environ['HOME'] + '/repos/go2/trunk/go2.glade2'
 
 # states
-INITIAL,  WORKING, WAITING, CANCELED, \
-NOTFOUND, FINISH,  FULL,    NOTEXIST = range(8)
+WORKING, WAITING, CANCELED, \
+NOTFOUND, FINISH,  FULL,    NOTEXIST, SKIP = range(8)
 
 
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
@@ -64,12 +64,31 @@ class Singleton(type):
         return cls.__instance
 
 
+class Observable:
+    def __init__(self):
+        self.__observers = []
+
+    def attach(self, cb):
+        self.__observers.append(cb)
+
+    def detach(self, cb):
+        self.__observers.remove(cb)
+
+    def notify(self, val):
+        for f in self.__observers:
+            f(val)
+    
+
+def rprint(cad):
+    print '\r' + cad,
+
+
 #-- path checkers
 def hidden(path):
     return (os.sep + '.') in path
 
-def not_mine(path):
-    return not path.startswith(os.environ['HOME'])
+def is_mine(path):
+    return path.startswith(os.environ['HOME'])
 
 #--
 
@@ -130,14 +149,12 @@ class PathAsserts:
     def add(self, func):
         self.filters.append(func)
 
-    def test(self, path):
+    def __call__(self, path):
         for f in self.filters:
             if f(path): return True
 
         return False
 
-    def __call__(self, path):
-        return self.test(path)
         
 
 class ConsoleUI(threading.Thread):
@@ -150,9 +167,11 @@ class ConsoleUI(threading.Thread):
     def __init__(self):
 	threading.Thread.__init__(self, name='ConsoleUI')
 	self.__matches = 0
-        self.state = None
+        self.__state = WORKING
         self.__last = 0
         self.__index = ord('a')
+        self.__clean_prompt = len('Select a path:  ') * ' '
+        self.log = logging.getLogger('ConsoleUI')
         manager.state_attach(self)
         manager.path_attach(self)
 
@@ -170,11 +189,11 @@ class ConsoleUI(threading.Thread):
         election = None
        
 	while 1:
-            if len(po.poll(250)) == 0:
-                if self.state == NOTFOUND:
+            if len(po.poll(100)) == 0:
+                if self.__state == NOTFOUND:
                     break
                 
-                elif self.state == WAITING and self.__matches == 1:
+                elif self.__state == WAITING and self.__matches == 1:
                     key = ENTER
 
                 else:                
@@ -197,30 +216,32 @@ class ConsoleUI(threading.Thread):
         self.ttyrestore()
         manager.setElection(election)
 
-    def state_update(self, state):
-        self.state = state
 
-        msg_select = '\rSelect a path: '
-	print ('\r' + ' '*len(msg_select)),
+    def state_update(self, state):
+        self.__state = state
+        
+	rprint (self.__clean_prompt)
 		
 	if state == WAITING:
-	    print '\rSelect a path: ',
+	    rprint('Select a path: ')
 	elif state == CANCELED:
-	    print '\rCanceled by user'
+	    rprint('Canceled by user')
 	elif state == NOTFOUND:
-            log.info("Pattern doesn't match")
-	    print "\rPattern doesn't match\r"
+            self.log.info("Pattern doesn't match")
+	    rprint("Pattern doesn't match\r")
 	elif state == FULL:
-            log.warning('Warning: Too many matches')
-	    print '\rWarning: Too many matches!'
+            self.log.warning('Warning: Too many matches')
+	    rprint('Warning: Too many matches!\n')
 	elif state == FINISH:
-	    print "\rChanging to: %s%s%s" % \
-                    (self.HIGH, manager.dirname, self.LOW)
+	    rprint("Changing to: %s%s%s\n" % \
+                    (self.HIGH, manager.dirname, self.LOW))
 	elif state == WORKING:
-            print '\rSearching...',
-            return
+            rprint('Searching...')
+        elif state == SKIP:
+            rprint("That's the current folder, nothing to be done\n")
 	else:
-	    print "\rInternal ERROR: unknown state '%d'\n" % state
+	    rprint("Internal ERROR: unknown state '%d'\n" % state)
+
 
     def path_update(self, path):
         self.__matches += 1
@@ -228,30 +249,42 @@ class ConsoleUI(threading.Thread):
         if self.__matches > self.maxItem:
             raise Manager.FullException
 
-        assert manager.state == WORKING
+        assert self.__state == WORKING
 
         path = highlight(Config().pattern, path, self.HIGH, self.LOW).\
                replace(os.environ['HOME'], '~')
                 
-        print "\r%c: %s" % (chr(self.__index), path.ljust(16))
-        print '\rSearching...',       
+        rprint("%c: %s\n" % (chr(self.__index), path.ljust(16)))
+        rprint('\rSearching...')
         self.__index += 1
 
 
-class PathList:
+class PathList(Observable):
 
     class AlreadyExistsException: pass
     def __init__(self):
+        Observable.__init__(self)
         self.data = []
+        self.delayed = []
+        self.log = logging.getLogger('PathList')
         self.lock = threading.Lock()
+
+    def append_delayed(self, item):
+        if item not in self.delayed:
+            self.delayed.append(item)
+
+    def commit_delayed(self):
+        for i in self.delayed:
+            self.append(i)
 
     def append(self, item):
         if item in self.data:
             raise self.AlreadyExistsException
 
-        log.debug("PathList[%s]: %s" % (len(self), item))
+        self.log.debug("[%s]: %s" % (len(self), item))
         self.lock.acquire()
         self.data.append(item)
+        self.notify(item)
         self.lock.release()
 
     def __getitem__(self, index):
@@ -260,13 +293,16 @@ class PathList:
     def __len__(self):
         return len(self.data)
 
+        
+
 
 class PathFile:
-    "Manage a file which content a path set"
+    "Manage a file holding a path set"
     def __init__(self, filename, size = 100):
         self.data = []
         self.filename = filename
         self.size = size
+        self.log = logging.getLogger('PathFile [%s]' % os.path.split(filename)[-1])
         if os.path.exists(filename): 
             fd = open(filename)
             self.data = [x.strip('\n') for x in fd.readlines()]
@@ -276,10 +312,10 @@ class PathFile:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
-        log.debug("   Saving to file: %s (%s)" % (item,
+        self.log.debug("   Saving to file: %s (%s)" % (item,
                                                       str(len(self.data))))
         if item in self.data: self.data.remove(item)
-        self.data = [item] + self.data
+        self.data.insert(0, item)
 
     def commit(self):
         fd = open(self.filename, 'w')
@@ -288,11 +324,9 @@ class PathFile:
 
 
 class Worker(threading.Thread):
-#    i = 0 #debería ser un atributo de clase
 
     def __init__(self, root, exclude):
-        threading.Thread.__init__(self) #, name = "Worker %d" % self.i)
-#        self.i += 1
+        threading.Thread.__init__(self , name = self.__class__.__name__)
         self.root = root
         self.__exclude = exclude
         self.count = 0
@@ -300,48 +334,56 @@ class Worker(threading.Thread):
     def is_excluded(self, path):
         # Comprueba que la ruta absoluta 'path' no está excluida
         # FIXME: Comprobar también que el nombre de directorio no está
-        # excluido (ej.svn), es decir, rutas relativas
+        # excluido (ej .svn), es decir, rutas relativas
         for p in self.__exclude:
             if path.startswith(p): return True
         return False
+
 
 class LocateWorker(Worker):
     "Parse locate output"
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        log.debug("[New LocateWorker]")
+        #rprint("Starting locate\n")
+        self.log = logging.getLogger('Locate')
+        self.log.debug("[New]")
         
     def run(self):
         options = '-l 1000 -e -b '
         if Config().ignorecase:
             options += '-i '
         cmd = 'locate %s %s' % (options, Config().pattern[0])
-        log.debug('locate cmd: %s' % cmd)
+        self.log.debug('locate cmd: %s' % cmd)
 
-        # FIXME: puede que locate no exista
         locate = subprocess.Popen(cmd, shell=True,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   close_fds=True)
 
+        if locate.returncode == None:
+            self.log.warning('locate failed. Is it installed?')
+            return
+
         exclude = PathAsserts()
         exclude.add(lambda x: not os.path.isdir(x))
         if not Config().process_hidden: exclude.add(hidden)
-        if not Config().from_root:      exclude.add(not_mine)
+        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
         exclude.add(self.is_excluded)
         exclude.add(lambda x: not Config().match_func(x))
 
         for i in locate.stdout:
+            print i
             if manager.stop.isSet():
                 os.kill(locate.pid, signal.SIGKILL)
                 return
 
             i = i.strip('\n')
-            log.debug("Locate: '%s'" % i)
+            self.log.debug(i)
             
             if exclude(i): continue
-            if Config().match_func(i):
-                manager.path_notify(i)
+
+            #if Config().match_func(i):
+            manager.path_notify(i)
 
 
 
@@ -353,13 +395,15 @@ class HistoryWorker(Worker):
         self.fname = kargs['fname']
         self.drop = []
         self.pFile = PathFile(self.fname, 500)
-        log.debug("[New HistoryWorker, len:%s]" % len(self.pFile.data))
+        self.log = logging.getLogger('History')
+        self.log.debug("[len:%s]" % len(self.pFile.data))
+
 
     def run(self):
         for i in self.pFile.data:
             if manager.stop.isSet(): return
 
-            log.debug ("History: '%s'" % i)
+            self.log.debug (i)
             if Config().match_func(i):
                 
                 if not os.path.exists(i):
@@ -369,6 +413,7 @@ class HistoryWorker(Worker):
                 if self.is_excluded(i): continue
 
                 manager.path_notify(i)
+
 
     def state_update(self, state):
         if state != FINISH: return
@@ -385,7 +430,8 @@ class CacheWorker(Worker):
         self.fname = kargs['fname']
         self.drop = []
         self.pFile = PathFile(self.fname, 1000)
-        log.debug("[New CacheWorker, len:%s]" % len(self.pFile.data))
+        self.log = logging.getLogger('Cache')
+        self.log.debug("[New, len:%s]" % len(self.pFile.data))
 
     def run(self):
 
@@ -414,15 +460,20 @@ class DiskWorker(Worker):
 
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        log.debug("[New DiskWorker (%s) for '%s']" % (id(self), self.root))
+        self.log = logging.getLogger('Disk')
+        self.log.debug("[New (%s) for '%s']" % (id(self), self.root))
+
 
     def run(self):
 
+        def walkerror(e):
+            self.log.warning(e)
+        
         exclude = PathAsserts()
         if not Config().process_hidden: exclude.add(hidden)
         exclude.add(self.is_excluded)
         
-        for root, dirs, files in os.walk(self.root):
+        for root, dirs, files in os.walk(self.root, onerror=walkerror):
             if manager.stop.isSet(): return
 
             if len(dirs) == 0: continue
@@ -434,20 +485,26 @@ class DiskWorker(Worker):
                     dirs.remove(d)
                     continue
 
+                if not Config().from_root and os.path.islink(path):
+                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
+                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
+                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
+                    manager.add_work(realpath)
+                    dirs.remove(d)
+                    continue
+
                 if Config().match_func(path):
                     manager.path_notify(path)
                     self.count += 1
+                    
                 elif Config().pattern > 1 and match_single(path):
-                    log.info('NUEVO WORKER')
-                    manager.createWorker(DiskWorker, path)
+                    manager.add_work(path)
                     dirs.remove(d)
+
 
 
 class ParentWorker(Worker):
     "Search in ancestor directories"
-    def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-
     def run(self):
         lis =  os.getcwd().split(os.sep)
         for i in range(len(lis)-1, 0, -1):
@@ -461,11 +518,14 @@ class Manager(object):
 
     def __init__(self):
         self.pathList = PathList()
-        self.__observers = []
+        self.optionalList = PathList()
         self.__state_observers = []
         self.__path_observers = []
         self.cfg = Config()
         self.exclude = self.cfg.exclude[:]
+
+        self.pending_lock = threading.Lock()
+        self.pending = []
         
         if self.cfg.parent_mode:
             self.mainJob = self.parentMode_job
@@ -474,9 +534,10 @@ class Manager(object):
 
         self.workers = []
         self.stop = threading.Event()
-        self.state = INITIAL
+        self.state = WORKING
 
         self.tinit = time.time()
+
 
     def createWorker(self, workerClass, root = None, **kargs):
         if self.stop.isSet(): return None
@@ -499,61 +560,54 @@ class Manager(object):
         return w
 
     def parentMode_job(self):
-        self.state_notify(WORKING)
         self.createWorker(ParentWorker)
 
     def historyMode_job(self):
-        log.info('go2: history mode')
-        self.state_notify(WORKING)
+        logging.info('go2: history mode')
         self.createWorker(HistoryWorker, fname = GO2HISTORY)
 
-
-    def mainJob2(self):
-        self.state_notify(WORKING)
-        
-        dirs = list(set([os.getcwd()]))
-        for target in dirs:
-            self.createWorker(DiskWorker, target)
-
-
     def mainJob(self):
-        self.state_notify(WORKING)
-        
         w = self.createWorker(HistoryWorker, fname = GO2HISTORY)
         if w: w.join(1)
 
-        # si el patrón es el nombre de un subdirectorio de pwd
+        # if pattern is a current subdirectory name 
         if len(self.cfg.pattern) == 1 and os.path.isdir(self.cfg.pattern[0]):
             self.path_notify(os.path.abspath(self.cfg.pattern[0]))
 
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
-        
-        dirs = list(set([os.getcwd(), os.environ['HOME']]))
-        #dirs = list(set([os.getcwd()]))
+
+        self.pending = list(set([os.getcwd(), os.environ['HOME']]))
 
         if self.cfg.from_root:
-            dirs.append('/')
-
-        for target in dirs:
-            self.createWorker(DiskWorker, target)
-
+            self.pending.append('/')
+            
 
     def waitJobsEnd(self):
         locate_run = False
         while 1:
-            if self.stop.isSet() or not self.any_worker_alive():
+            logging.debug('PENDIND: %s\n' % self.pending)            
+            if self.pending and threading.activeCount() < 20:
+                path = self.pending[0]
+                self.pending_lock.acquire()
+                self.pending = self.pending[1:]
+                self.pending_lock.release()
+
+                manager.createWorker(DiskWorker, path)
+            
+            if self.stop.isSet() or not self.__any_worker_alive():
                 break
             
             select.select([],[],[], 0.25)  # espera pasiva
-            if time.time() - self.tinit > 5 and not locate_run:
-                log.debug("Starting locate")
+            if not locate_run and time.time() - self.tinit > 5:
                 locate_run = True
                 if self.cfg.locate:
                     w = self.createWorker(LocateWorker)
-                
+
 
 	if self.stop.isSet(): return
+
+        self.pathList.commit_delayed()
 
         if len(self.pathList) == 0:
             self.state_notify(NOTFOUND)
@@ -562,24 +616,34 @@ class Manager(object):
         self.state_notify(WAITING)
 
         for w in self.workers:
-            log.debug("worker %s (%s) found %s" % \
+            logging.debug("worker %s (%s) found %s" % \
                           (id(w), w.__class__.__name__.ljust(13), w.count))
 
     def run(self):
         self.mainJob()
         self.waitJobsEnd()
-        while(self.any_worker_alive()):
+        while(self.__any_worker_alive()):
             select.select([],[],[], 0.5)  
+
+
+    def add_work(self, path):
+        if path in self.pending or path in self.exclude: return
+        
+        self.pending_lock.acquire()
+        self.pending.append(path)
+        self.pending_lock.release()
+
         
     def state_attach(self, ob):
         self.__state_observers.append(ob)
 
     def path_attach(self, ob):
-        self.__path_observers.append(ob)
+        self.pathList.attach(ob.path_update)
+        #self.__path_observers.append(ob)
 		
     def state_notify(self, state):
         self.state = state
-        if state == INITIAL: return
+        
         for o in self.__state_observers:
             o.state_update(self.state)
 
@@ -587,31 +651,24 @@ class Manager(object):
             self.state_notify(WAITING)
             self.stop.set()
 
-    def path_notify(self, path):
 
-        # no listar el directorio actual
-        if path == os.getcwd(): return   
+    def path_notify(self, path):
+        if self.state != WORKING: return
+
+        if path == os.getcwd():
+            self.pathList.append_delayed(path)
+            return
 
         try:
             self.pathList.append(path)
         except PathList.AlreadyExistsException:
-            return     
-
-        try:
-            for o in self.__path_observers:
-                o.path_update(path)
+            return
         except self.FullException:
             self.state_notify(FULL)
-            
 
-            
-    #private
-    def any_worker_alive(self):
-        #print '--', threading.activeCount()
-        #print '\r-- ', self.workers
-        #print '----------'
-        #for i in self.workers: print i, i.isAlive()
-        
+
+    def __any_worker_alive(self):
+        #Change to "any()" when Debian uses python2.5
         for i in self.workers:
             if i.isAlive(): return True
         return False
@@ -622,9 +679,13 @@ class Manager(object):
         self.stop.set()
         if election == None:
             self.state_notify(CANCELED)
-            return 
+            return
 
         self.dirname = self.pathList[election]
+
+        if self.dirname == os.getcwd():
+            self.state_notify(SKIP)
+            return
 
         if not os.path.exists(self.dirname):
             self.state_notify(NOTEXIST)
@@ -641,7 +702,7 @@ class Manager(object):
                     aux = cmdlist[i].replace('%d', '%s')
                     cmdlist[i] = aux % self.dirname
            
-            log.info("command is: '%s'" % cmdlist)
+            logging.info("command is: '%s'" % cmdlist)
             os.chdir(self.dirname)
             os.execvp(cmdlist[0], cmdlist)
         else:
@@ -720,7 +781,7 @@ class Config(object):
             self.exclude.extend([i for i in lines if i]) 
             fd.close()
 
-        if self.exclude: log.debug('exclude: %s' % self.exclude)
+        if self.exclude: logging.debug('exclude: %s' % self.exclude)
        
         try:
             opts, self.pattern = getopt.getopt(argv[1:], 'Hird',
@@ -752,7 +813,7 @@ class Config(object):
                 elif os.path.isfile(a):
                     dirname = os.path.split(a)[0]
                 else: continue
-                log.debug('dir:  ' + dirname)
+                logging.debug('dir:  ' + dirname)
                 os.chdir(dirname)
 
     def parse_pattern(self):
@@ -852,11 +913,11 @@ class GtkFrontend:
         try:
             self.config()
         except Config.EmptyPatternException:
-            log.debug('Falta diálogo de error, vacio')
+            logging.debug('Falta diálogo de error, vacio')
             gobject.idle_add(self.gui_reset)
             return
         except Config.NoValidPatternException:
-            log.debug('Falta diálogo de error, no válido')
+            logging.debug('Falta diálogo de error, no válido')
             return
 
         try:
@@ -936,11 +997,11 @@ class GtkFrontend:
 
     def offline_state_update(self, state):
         if state == NOTFOUND:
-            log.debug('NOTFOUND')
+            logging.debug('NOTFOUND')
             self.gui_reset(None, 'Not Found')
 
         if state == WAITING:
-            log.debug('WAITING')
+            logging.debug('WAITING')
             self.wg_button_search.set_sensitive(True)
             self.wg_button_cancel.set_sensitive(False)
             self.wg_button_clean.set_sensitive(True)
@@ -988,32 +1049,32 @@ if __name__ == '__main__':
         argv[1:1]  = file(GO2CONFIG).read().split()
 
     if '--log' in argv or '--debug' in argv:
-        log.basicConfig(level=log.DEBUG,
-                            format='%(asctime)s %(levelname)-8s %(message)s',
-                            filename=GO2LOG)
+        logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
+                        filename=GO2LOG)
 
     if '--debug' in argv:
-        console = log.StreamHandler()
-        console.setLevel(log.DEBUG)
-        formatter = log.Formatter('\r%(levelname)-8s %(message)s')
+        console = logging.StreamHandler()
+        console.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('\r%(levelname)-8s %(message)s')
         console.setFormatter(formatter)
-        log.getLogger('').addHandler(console)
+        logging.getLogger().addHandler(console)
         
     else:
-        log.getLogger().setLevel(log.CRITICAL)
+        logging.getLogger().setLevel(logging.CRITICAL)
 
     
-    log.info("---------- [go2 '%s']" % sys.argv[1:])
+    logging.info("---------- [go2 '%s']" % sys.argv[1:])
 
-    try: # Import Psyco if available
-        import psyco
-        psyco.full()
-    except ImportError:
-        log.warning("psyco not available")
+    #try: 
+    #    import psyco
+    #    psyco.full()
+    #except ImportError:
+    #    logging.warning("psyco not available")
 
     has_DISPLAY = os.environ.has_key("DISPLAY")
     if not has_DISPLAY:
-        log.warning("$DISPLAY is not set, using console mode")
+        logging.warning("$DISPLAY isn't set, fallback console mode")
 
     if "--gui" in argv and has_DISPLAY:
         import gobject

@@ -1,6 +1,12 @@
+go2 (0.071209) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@uclm.es>  Sun, 09 Dec 2007 17:45:45 +0100
+
 go2 (0.070718) unstable; urgency=low
 
-  * "Go to" button was enabled on empty pattern
+  * "Go to" button was enabled on empty pattern, fixed
 
  -- David Villa Alises <David.Villa@uclm.es>  Wed, 18 Jul 2007 10:01:47 +0200
 

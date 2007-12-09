@@ -3,13 +3,16 @@ Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl
-Standards-Version: 3.7.2
+Standards-Version: 3.7.3
 XS-Python-Version: all
 
 Package: go2
 Architecture: all
 Depends: ${python:Depends}
+Suggests: python-psyco, locate
 XB-Python-Version: ${python:Versions}
 Description: Fast directory finder
  go2 provides a simple fast way to change to frequently visited
  directories.
+ .
+  Homepage:  http://arco.inf-cr.uclm.es/~david.villa/go2.html

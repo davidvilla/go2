@@ -40,3 +40,87 @@ Traceback (most recent call last):
     for i in self.drop: self.pFile.data.remove(i)
 ValueError: list.remove(x): x not in list
 
+
+---
+
+Searching...Exception in thread Thread-1:
+Traceback (most recent call last):
+ File "threading.py", line 442, in __bootstrap
+   self.run()
+ File "/usr/lib/go2/go2.py", line 371, in run
+   manager.path_notify(i)
+ File "/usr/lib/go2/go2.py", line 593, in path_notify
+   if path == os.getcwd(): return
+OSError: [Errno 2] No such file or directory
+ 
+ 
+
+Traceback (most recent call last):
+ File "/usr/lib/go2/go2.py", line 1024, in ?
+   console_main(argv)
+ File "/usr/lib/go2/go2.py", line 979, in console_main
+   manager.run()
+ File "/usr/lib/go2/go2.py", line 569, in run
+   self.mainJob()
+ File "/usr/lib/go2/go2.py", line 532, in mainJob
+   dirs = list(set([os.getcwd(), os.environ['HOME']]))
+OSError: [Errno 2] No such file or directory
+ 
+---
+
+a: ~/repos/web   
+b: ~/repos/redes_sistemas/web
+c: ~/repos/home/web
+Changing to: /home/david/repos/web
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "threading.py", line 442, in __bootstrap
+    self.run()
+  File "/usr/lib/go2/go2.py", line 402, in run
+    manager.path_notify(i)
+  File "/usr/lib/go2/go2.py", line 602, in path_notify
+    o.path_update(path)
+  File "/usr/lib/go2/go2.py", line 231, in path_update
+    assert manager.state == WORKING
+AssertionError
+
+
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "threading.py", line 442, in __bootstrap
+    self.run()
+  File "/usr/lib/go2/go2.py", line 402, in run
+    manager.path_notify(i)
+  File "/usr/lib/go2/go2.py", line 602, in path_notify
+    o.path_update(path)
+  File "/usr/lib/go2/go2.py", line 231, in path_update
+    assert manager.state == WORKING
+AssertionError
+
+
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "threading.py", line 442, in __bootstrap
+    self.run()
+  File "/usr/lib/go2/go2.py", line 402, in run
+    manager.path_notify(i)
+  File "/usr/lib/go2/go2.py", line 602, in path_notify
+    o.path_update(path)
+  File "/usr/lib/go2/go2.py", line 231, in path_update
+    assert manager.state == WORKING
+AssertionError
+
+
+Exception in thread DiskWorker:
+Traceback (most recent call last):
+ File "threading.py", line 442, in __bootstrap
+   self.run()
+ File "/usr/lib/go2/go2.py", line 484, in run
+   manager.createWorker(DiskWorker, realpath)
+ File "/usr/lib/go2/go2.py", line 554, in createWorker
+   w.start()
+ File "threading.py", line 416, in start
+   _start_new_thread(self.__bootstrap, ())
+ File "/usr/lib/python2.4/site-packages/psyco/profiler.py", line 375, in psyco_start_new_thread
+   return original_start_new_thread(psyco_thread_stub, (callable, args, kw))
+error: can't start new thread
