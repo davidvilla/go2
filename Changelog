@@ -1,5 +1,9 @@
 -*- coding: utf-8 -*-
 
+2007-12-14:
+	* Feature: FindWorker added
+	* Feature: New "list-only" mode
+	
 2007-12-09
 	* Feature: If current folder match, it appears at end
 	* Feature: Follows links in not-root searching

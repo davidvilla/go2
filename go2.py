@@ -164,15 +164,19 @@ class ConsoleUI(threading.Thread):
 
     maxItem = 26
     
-    def __init__(self):
+    def __init__(self, pasive=False):
 	threading.Thread.__init__(self, name='ConsoleUI')
+        self.__pasive = pasive
 	self.__matches = 0
         self.__state = WORKING
         self.__last = 0
         self.__index = ord('a')
         self.__clean_prompt = len('Select a path:  ') * ' '
         self.log = logging.getLogger('ConsoleUI')
-        manager.state_attach(self)
+
+        if not pasive:
+            manager.state_attach(self)
+        
         manager.path_attach(self)
 
     def __del__(self):
@@ -182,6 +186,8 @@ class ConsoleUI(threading.Thread):
         tty.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def run(self):
+        if self.__pasive: return
+        
         self.old_settings = tty.tcgetattr(sys.stdin)
         tty.setraw(sys.stdin)
         po = select.poll()
@@ -228,7 +234,7 @@ class ConsoleUI(threading.Thread):
 	    rprint('Canceled by user')
 	elif state == NOTFOUND:
             self.log.info("Pattern doesn't match")
-	    rprint("Pattern doesn't match\r")
+	    rprint("Pattern doesn't match\n\r")
 	elif state == FULL:
             self.log.warning('Warning: Too many matches')
 	    rprint('Warning: Too many matches!\n')
@@ -250,6 +256,10 @@ class ConsoleUI(threading.Thread):
             raise Manager.FullException
 
         assert self.__state == WORKING
+
+        if self.__pasive:
+            rprint("%s\n" % path)
+            return
 
         path = highlight(Config().pattern, path, self.HIGH, self.LOW).\
                replace(os.environ['HOME'], '~')
@@ -344,7 +354,6 @@ class LocateWorker(Worker):
     "Parse locate output"
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        #rprint("Starting locate\n")
         self.log = logging.getLogger('Locate')
         self.log.debug("[New]")
         
@@ -360,10 +369,6 @@ class LocateWorker(Worker):
                                   stderr=subprocess.PIPE,
                                   close_fds=True)
 
-        if locate.returncode == None:
-            self.log.warning('locate failed. Is it installed?')
-            return
-
         exclude = PathAsserts()
         exclude.add(lambda x: not os.path.isdir(x))
         if not Config().process_hidden: exclude.add(hidden)
@@ -372,7 +377,6 @@ class LocateWorker(Worker):
         exclude.add(lambda x: not Config().match_func(x))
 
         for i in locate.stdout:
-            print i
             if manager.stop.isSet():
                 os.kill(locate.pid, signal.SIGKILL)
                 return
@@ -454,6 +458,56 @@ class CacheWorker(Worker):
         if state == FINISH:
             for i in self.drop: self.pFile.data.remove(i)
             self.pFile.commit()
+
+
+class FindWorker(Worker):
+    def __init__(self, *args, **kargs):
+        Worker.__init__(self, *args)
+        self.log = logging.getLogger('Locate')
+        self.log.debug("[%s] New FindWorker for '%s'" % (id(self), self.root))
+
+    def run(self):
+        name = '-name'
+        if Config().ignorecase:
+            name = '-iname '
+        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[0])
+        # FIXME: puede que find no exista
+        self.ps = subprocess.Popen(cmd, shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                close_fds=True)
+
+        logging.info('find cmd[%s]: %s' % (self.ps.pid, cmd))
+
+        exclude = PathAsserts()
+        exclude.add(lambda x: not os.path.isdir(x))
+        if not Config().process_hidden: exclude.add(hidden)
+        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
+        exclude.add(self.is_excluded)
+        exclude.add(lambda x: not Config().match_func(x))
+
+        for i in self.ps.stdout:
+            if manager.stop.isSet():
+                self.log.debug('Killing find %s' % self.ps.pid)
+                os.kill(self.ps.pid, signal.SIGKILL)
+                break
+            
+            i = i.strip('\n')
+            self.log.debug(i)
+            
+            if exclude(i): continue
+            manager.path_notify(i)
+
+        manager.state_detach(self)
+
+
+    def state_update(self, state):
+        if state in [CANCELED, FINISH]:
+            self.log.debug('Killing find %s at update()' % self.ps.pid)
+            try:
+                os.kill(self.ps.pid, signal.SIGKILL)
+            except OSError, e:
+                rprint('\n %s %s \n' % (e, self.ps.pid))
 
 
 class DiskWorker(Worker):
@@ -584,7 +638,8 @@ class Manager(object):
             
 
     def waitJobsEnd(self):
-        locate_run = False
+        #ocate_run = False
+        locate_run = True  # never run locate
         while 1:
             logging.debug('PENDIND: %s\n' % self.pending)            
             if self.pending and threading.activeCount() < 20:
@@ -593,7 +648,8 @@ class Manager(object):
                 self.pending = self.pending[1:]
                 self.pending_lock.release()
 
-                manager.createWorker(DiskWorker, path)
+                manager.createWorker(FindWorker, path)
+                #manager.createWorker(DiskWorker, path)
             
             if self.stop.isSet() or not self.__any_worker_alive():
                 break
@@ -636,6 +692,9 @@ class Manager(object):
         
     def state_attach(self, ob):
         self.__state_observers.append(ob)
+
+    def state_detach(self, ob):
+        self.__state_observers.remove(ob)        
 
     def path_attach(self, ob):
         self.pathList.attach(ob.path_update)
@@ -738,13 +797,14 @@ welcome to redistribute it under certain conditions; See COPYING for details.
     print 'Usage: %s [options] <pattern>' % prgname
     print """
 options:
-  -i            ignore case                      (default: case sensitive)
-  -r            search in whole file system      (default: $HOME only)
-  -d            search into hidden directories   (default: not hidden)
-  -H            list history
-  --gui         GUI mode
-  --cmd <cmd>   exec 'cmd'                       (default: chdir)
-  --dir <dir>   search from 'dir' directory      (default: current)
+  -i           ignore case                       (default: case sensitive)
+  -r           search in whole file system       (default: $HOME only)
+  -d           search into hidden directories    (default: not hidden)
+  -H           list history
+  -l           list only, print matches and exit
+  --gui        GUI mode
+  --cmd <cmd>  exec 'cmd'                        (default: chdir)
+  --dir <dir>  search from 'dir' directory       (default: current)
 """
     return 1
 
@@ -766,6 +826,7 @@ class Config(object):
         self.ignorecase = False
         self.process_hidden = False
         self.locate = True
+        self.list_only = False
         self.match_func = match_single
         self.pattern = None
         self.exclude = []
@@ -784,7 +845,7 @@ class Config(object):
         if self.exclude: logging.debug('exclude: %s' % self.exclude)
        
         try:
-            opts, self.pattern = getopt.getopt(argv[1:], 'Hird',
+            opts, self.pattern = getopt.getopt(argv[1:], 'Hirdl',
                                                ['setup','no-locate', 'log',
                                                 'debug', 'gui', 
                                                 'cmd=', 'dir='])
@@ -794,6 +855,8 @@ class Config(object):
         for o, a in opts:
             if o == '-i':
                 self.ignorecase = True
+            if o == '-l':
+                self.list_only = True
             if o == '-r':
                 self.from_root = True
             if o == '-d':
@@ -1028,14 +1091,13 @@ def console_main(argv):
         print 'go2: invalid pattern', args
         sys.exit(1)
 
-        
-    manager = Manager()
-    R = ConsoleUI()
 
     #signal.signal(signal.SIGQUIT, leaveAdvice)
     #signal.signal(signal.SIGINT, leaveAdvice)
     #signal.signal(signal.SIGTERM, leaveAdvice)
-    
+       
+    manager = Manager()
+    R = ConsoleUI(Config().list_only)
     R.start()
     manager.run()
     R.join()
