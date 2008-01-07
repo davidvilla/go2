@@ -1,5 +1,8 @@
 -*- coding: utf-8 -*-
 
+2008-01-07:
+	* Feature: Search in children of visited directories (HistoryWorker)
+	
 2007-12-14:
 	* Feature: FindWorker added
 	* Feature: New "list-only" mode
