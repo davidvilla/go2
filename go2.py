@@ -125,7 +125,7 @@ def highlight(pattern, path, before, after, flags=0):
     p = len(pattern) - 1
     for i in range(len(items)-1,-1,-1):
         if p < 0: break
-        if items[i].startswith(pattern[p]):
+        if items[i].lower().startswith(pattern[p]):
             orig = items[i][:len(pattern[p])]
             items[i] = items[i].replace(orig,
                                         before + orig + after, 1)
@@ -392,7 +392,7 @@ class LocateWorker(Worker):
 
 
 class HistoryWorker(Worker):
-    "Search in directories selected some time"
+    "Search in directories selected at any time"
 
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
@@ -417,6 +417,8 @@ class HistoryWorker(Worker):
                 if self.is_excluded(i): continue
 
                 manager.path_notify(i)
+
+            manager.add_work(i)
 
 
     def state_update(self, state):
@@ -451,12 +453,15 @@ class CacheWorker(Worker):
 
                 manager.path_notify(i)
 
+
     def path_update(self, path):
         self.pFile.insert(path)
 	
     def state_update(self, state):
         if state == FINISH:
             for i in self.drop: self.pFile.data.remove(i)
+            if manager.dirname in self.pFile.data:
+                self.pFile.data.remove(manager.dirname)
             self.pFile.commit()
 
 
@@ -470,7 +475,7 @@ class FindWorker(Worker):
         name = '-name'
         if Config().ignorecase:
             name = '-iname '
-        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[0])
+        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[-1])
         # FIXME: puede que find no exista
         self.ps = subprocess.Popen(cmd, shell=True,
                                 stdout=subprocess.PIPE,
@@ -631,7 +636,7 @@ class Manager(object):
         w = self.createWorker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
 
-        self.pending = list(set([os.getcwd(), os.environ['HOME']]))
+        self.pending.extend(list(set([os.getcwd(), os.environ['HOME']])))
 
         if self.cfg.from_root:
             self.pending.append('/')
@@ -648,8 +653,8 @@ class Manager(object):
                 self.pending = self.pending[1:]
                 self.pending_lock.release()
 
-                manager.createWorker(FindWorker, path)
-                #manager.createWorker(DiskWorker, path)
+                manager.createWorker(DiskWorker, path)
+                #manager.createWorker(FindWorker, path)
             
             if self.stop.isSet() or not self.__any_worker_alive():
                 break
