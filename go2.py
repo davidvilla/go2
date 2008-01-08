@@ -804,7 +804,7 @@ welcome to redistribute it under certain conditions; See COPYING for details.
 options:
   -i           ignore case                       (default: case sensitive)
   -r           search in whole file system       (default: $HOME only)
-  -d           search into hidden directories    (default: not hidden)
+  -d           search into hidden directories    (default: skip hidden)
   -H           list history
   -l           list only, print matches and exit
   --gui        GUI mode
