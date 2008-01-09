@@ -96,14 +96,18 @@ def filterout_hidden(pathlist):
     return [x for x in pathlist if not hidden(x)]
 
 def match_single(path):
-    if Config().ignorecase:
-        path = path.lower()
+    path = Config().apply_case(path)
+
+    #if Config().ignorecase:
+    #    path = path.lower()
 
     return os.path.basename(path).startswith(Config().pattern[0])
 
 def match_multi(path):
-    if Config().ignorecase:
-        path = path.lower()
+    path = Config().apply_case(path)
+
+    #if Config().ignorecase:
+    #    path = path.lower()
 
     pattern = Config().pattern
     items = path.split(os.sep)[1:]
@@ -125,7 +129,7 @@ def highlight(pattern, path, before, after, flags=0):
     p = len(pattern) - 1
     for i in range(len(items)-1,-1,-1):
         if p < 0: break
-        if items[i].lower().startswith(pattern[p]):
+        if Config().apply_case(items[i]).startswith(Config().apply_case(pattern[p])):
             orig = items[i][:len(pattern[p])]
             items[i] = items[i].replace(orig,
                                         before + orig + after, 1)
@@ -837,6 +841,8 @@ class Config(object):
         self.exclude = []
         self.cmd = None
 
+        self.apply_case = lambda x:x
+
         if not os.path.exists(GO2DIR):
             os.mkdir(GO2DIR)
 
@@ -860,6 +866,7 @@ class Config(object):
         for o, a in opts:
             if o == '-i':
                 self.ignorecase = True
+                self.apply_case = string.lower
             if o == '-l':
                 self.list_only = True
             if o == '-r':
