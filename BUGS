@@ -124,3 +124,14 @@ Traceback (most recent call last):
  File "/usr/lib/python2.4/site-packages/psyco/profiler.py", line 375, in psyco_start_new_thread
    return original_start_new_thread(psyco_thread_stub, (callable, args, kw))
 error: can't start new thread
+
+
+Exception in thread CacheWorker:
+Traceback (most recent call last):
+ File "/usr/lib/python2.4/threading.py", line 442, in __bootstrap
+   self.run()
+ File "/usr/lib/go2/go2.py", line 451, in run
+   if Config().match_func(i):
+ File "/usr/lib/go2/go2.py", line 115, in match_multi
+   match = items[-1].startswith(pattern[-1])
+IndexError: list index out of range

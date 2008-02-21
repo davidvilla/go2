@@ -39,6 +39,7 @@ ENTER = 13
 
 #FILES
 GO2DIR =     os.path.join(os.environ['HOME'], '.go2')
+GO2INCLUDE = os.path.join(GO2DIR, 'include')
 GO2EXCLUDE = os.path.join(GO2DIR, 'exclude')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE =   os.path.join(GO2DIR, 'cache')
@@ -309,6 +310,14 @@ class PathList(Observable):
 
         
 
+def loadlines(fname):
+    if not os.path.exists(fname): return []
+
+    fd = open(fname)
+    lines = [i.strip() for i in fd.readlines()]
+    fd.close()    
+    return [i for i in lines if i]
+    
 
 class PathFile:
     "Manage a file holding a path set"
@@ -317,10 +326,12 @@ class PathFile:
         self.filename = filename
         self.size = size
         self.log = logging.getLogger('PathFile [%s]' % os.path.split(filename)[-1])
-        if os.path.exists(filename): 
-            fd = open(filename)
-            self.data = [x.strip('\n') for x in fd.readlines()]
-            fd.close()
+        self.data = loadlines(filename)
+               
+#        if not os.path.exists(filename): return
+#        fd = open(filename)
+#        self.data = [x for x in fd.read().split('\n') if x]
+#        fd.close()
 
         if not Config().process_hidden:
             self.data = filterout_hidden(self.data)
@@ -548,13 +559,15 @@ class DiskWorker(Worker):
                     dirs.remove(d)
                     continue
 
-                if not Config().from_root and os.path.islink(path):
-                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
-                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
-                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
-                    manager.add_work(realpath)
-                    dirs.remove(d)
-                    continue
+#                if not Config().from_root and os.path.islink(path):
+#                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
+#                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
+#                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
+#                    manager.add_work(realpath)
+#                    dirs.remove(d)
+#                    continue
+
+                if os.path.islink(path): continue
 
                 if Config().match_func(path):
                     manager.path_notify(path)
@@ -605,6 +618,10 @@ class Manager(object):
     def createWorker(self, workerClass, root = None, **kargs):
         if self.stop.isSet(): return None
 
+        if root in self.exclude:
+            logging.info("createWorker: '%s' previously exluded" % root)
+            return None
+
         if root:
             exclude_cp = [x for x in self.cfg.exclude if not root.startswith(x)]
             self.exclude.append(root)
@@ -644,13 +661,18 @@ class Manager(object):
 
         if self.cfg.from_root:
             self.pending.append('/')
-            
+            return
+
+        self.pending.extend(Config().include)
+        
+        
 
     def waitJobsEnd(self):
         #ocate_run = False
         locate_run = True  # never run locate
         while 1:
-            logging.debug('PENDIND: %s\n' % self.pending)            
+            if self.pending:
+                logging.debug('PENDIND: %s' % self.pending)            
             if self.pending and threading.activeCount() < 20:
                 path = self.pending[0]
                 self.pending_lock.acquire()
@@ -660,7 +682,8 @@ class Manager(object):
                 manager.createWorker(DiskWorker, path)
                 #manager.createWorker(FindWorker, path)
             
-            if self.stop.isSet() or not self.__any_worker_alive():
+            if self.stop.isSet() or \
+                   not (self.__any_worker_alive() or self.pending):
                 break
             
             select.select([],[],[], 0.25)  # espera pasiva
@@ -839,6 +862,7 @@ class Config(object):
         self.match_func = match_single
         self.pattern = None
         self.exclude = []
+        self.include = []
         self.cmd = None
 
         self.apply_case = lambda x:x
@@ -847,13 +871,13 @@ class Config(object):
             os.mkdir(GO2DIR)
 
         # load file specified excluded paths
-        if os.path.exists(GO2EXCLUDE):
-            fd = open(GO2EXCLUDE)
-            lines = [i.strip() for i in fd.readlines()]
-            self.exclude.extend([i for i in lines if i]) 
-            fd.close()
-
+        self.exclude = loadlines(GO2EXCLUDE)
         if self.exclude: logging.debug('exclude: %s' % self.exclude)
+        
+        self.include = loadlines(GO2INCLUDE)
+        if self.include: logging.debug('include: %s' % self.include)
+
+
        
         try:
             opts, self.pattern = getopt.getopt(argv[1:], 'Hirdl',
@@ -1138,7 +1162,7 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.CRITICAL)
 
     
-    logging.info("---------- [go2 '%s']" % sys.argv[1:])
+    logging.info("\n\n---------- [go2 '%s']" % sys.argv[1:])
 
     #try: 
     #    import psyco
