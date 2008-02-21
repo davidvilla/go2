@@ -1,5 +1,9 @@
 -*- coding: utf-8 -*-
 
+208-02-21:
+	* Bug fix: go2 finish when "pending" work left
+	* Feature: New file with mandatory "include"s
+
 2008-01-09:
 	* Bug fix: path highlight case-insensitive
 

@@ -1,3 +1,9 @@
+go2 (0.080221) unstable; urgency=low
+
+  * bug fixes
+
+ -- David Villa Alises <David.Villa@uclm.es>  Thu, 21 Feb 2008 02:21:46 +0100
+
 go2 (0.080109) unstable; urgency=low
 
   * minimal bug fixes
