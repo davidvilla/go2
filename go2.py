@@ -169,20 +169,21 @@ class ConsoleUI(threading.Thread):
 
     maxItem = 26
     
-    def __init__(self, pasive=False):
+    def __init__(self, manager):
 	threading.Thread.__init__(self, name='ConsoleUI')
-        self.__pasive = pasive
+        self.__mgr = manager
 	self.__matches = 0
         self.__state = WORKING
         self.__last = 0
         self.__index = ord('a')
         self.__clean_prompt = len('Select a path:  ') * ' '
-        self.log = logging.getLogger('ConsoleUI')
+        self.log = logging.getLogger('ConsoleUI')             
 
-        if not pasive:
-            manager.state_attach(self)
+        if not Config().list_only:
+            self.__mgr.state_attach(self)
         
-        manager.path_attach(self)
+        self.__mgr.path_attach(self)
+
 
     def __del__(self):
 	pass #self.ttyrestore()
@@ -191,7 +192,7 @@ class ConsoleUI(threading.Thread):
         tty.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def run(self):
-        if self.__pasive: return
+        if Config().list_only: return
         
         self.old_settings = tty.tcgetattr(sys.stdin)
         tty.setraw(sys.stdin)
@@ -225,7 +226,7 @@ class ConsoleUI(threading.Thread):
 		break
 
         self.ttyrestore()
-        manager.setElection(election)
+        self.__mgr.set_election(election)
 
 
     def state_update(self, state):
@@ -245,7 +246,7 @@ class ConsoleUI(threading.Thread):
 	    rprint('Warning: Too many matches!\n')
 	elif state == FINISH:
 	    rprint("Changing to: %s%s%s\n" % \
-                    (self.HIGH, manager.dirname, self.LOW))
+                    (self.HIGH, self.__mgr.dirname, self.LOW))
 	elif state == WORKING:
             rprint('Searching...')
         elif state == SKIP:
@@ -262,12 +263,13 @@ class ConsoleUI(threading.Thread):
 
         assert self.__state == WORKING
 
-        if self.__pasive:
+        if Config().list_only:
             rprint("%s\n" % path)
             return
 
-        path = highlight(Config().pattern, path, self.HIGH, self.LOW).\
-               replace(os.environ['HOME'], '~')
+        path = highlight(Config().pattern,
+                         path, self.HIGH, self.LOW).\
+                         replace(os.environ['HOME'], '~')
                 
         rprint("%c: %s\n" % (chr(self.__index), path.ljust(16)))
         rprint('\rSearching...')
@@ -350,10 +352,11 @@ class PathFile:
 
 class Worker(threading.Thread):
 
-    def __init__(self, root, exclude):
-        threading.Thread.__init__(self , name = self.__class__.__name__)
+    def __init__(self, manager, root, exclude):
+        threading.Thread.__init__(self, name = self.__class__.__name__)
+        self.mgr = manager
         self.root = root
-        self.__exclude = exclude
+        self.__exclude = exclude # lista de rutas excluidas
         self.count = 0
 
     def is_excluded(self, path):
@@ -392,17 +395,15 @@ class LocateWorker(Worker):
         exclude.add(lambda x: not Config().match_func(x))
 
         for i in locate.stdout:
-            if manager.stop.isSet():
+            if self.mgr.stop.isSet():
                 os.kill(locate.pid, signal.SIGKILL)
                 return
 
             i = i.strip('\n')
-            self.log.debug(i)
-            
-            if exclude(i): continue
+            self.log.debug(i)          
 
-            #if Config().match_func(i):
-            manager.path_notify(i)
+            if not exclude(i):
+                self.mgr.path_notify(i)
 
 
 
@@ -420,7 +421,7 @@ class HistoryWorker(Worker):
 
     def run(self):
         for i in self.pFile.data:
-            if manager.stop.isSet(): return
+            if self.mgr.stop.isSet(): return
 
             self.log.debug (i)
             if Config().match_func(i):
@@ -431,16 +432,16 @@ class HistoryWorker(Worker):
 
                 if self.is_excluded(i): continue
 
-                manager.path_notify(i)
+                self.mgr.path_notify(i)
 
-            manager.add_work(i)
+            self.mgr.add_work(i) # search in all historic paths
 
 
     def state_update(self, state):
         if state != FINISH: return
         for i in self.drop:
             self.pFile.data.remove(i)
-        self.pFile.insert(manager.dirname)
+        self.pFile.insert(self.mgr.dirname)
         self.pFile.commit()
 
 
@@ -457,7 +458,7 @@ class CacheWorker(Worker):
     def run(self):
 
         for i in self.pFile.data:
-            if manager.stop.isSet(): return
+            if self.mgr.stop.isSet(): return
 
             if Config().match_func(i):
                 if not os.path.exists(i):
@@ -466,7 +467,7 @@ class CacheWorker(Worker):
 
                 if self.is_excluded(i): continue
 
-                manager.path_notify(i)
+                self.mgr.path_notify(i)
 
 
     def path_update(self, path):
@@ -475,8 +476,8 @@ class CacheWorker(Worker):
     def state_update(self, state):
         if state == FINISH:
             for i in self.drop: self.pFile.data.remove(i)
-            if manager.dirname in self.pFile.data:
-                self.pFile.data.remove(manager.dirname)
+            if self.mgr.dirname in self.pFile.data:
+                self.pFile.data.remove(self.mgr.dirname)
             self.pFile.commit()
 
 
@@ -507,7 +508,7 @@ class FindWorker(Worker):
         exclude.add(lambda x: not Config().match_func(x))
 
         for i in self.ps.stdout:
-            if manager.stop.isSet():
+            if self.mgr.stop.isSet():
                 self.log.debug('Killing find %s' % self.ps.pid)
                 os.kill(self.ps.pid, signal.SIGKILL)
                 break
@@ -516,9 +517,9 @@ class FindWorker(Worker):
             self.log.debug(i)
             
             if exclude(i): continue
-            manager.path_notify(i)
+            self.mgr.path_notify(i)
 
-        manager.state_detach(self)
+        self.mgr.state_detach(self)
 
 
     def state_update(self, state):
@@ -548,7 +549,7 @@ class DiskWorker(Worker):
         exclude.add(self.is_excluded)
         
         for root, dirs, files in os.walk(self.root, onerror=walkerror):
-            if manager.stop.isSet(): return
+            if self.mgr.stop.isSet(): return
 
             if len(dirs) == 0: continue
 
@@ -563,18 +564,18 @@ class DiskWorker(Worker):
 #                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
 #                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
 #                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
-#                    manager.add_work(realpath)
+#                    self.mgr.add_work(realpath)
 #                    dirs.remove(d)
 #                    continue
 
                 if os.path.islink(path): continue
 
                 if Config().match_func(path):
-                    manager.path_notify(path)
+                    self.mgr.path_notify(path)
                     self.count += 1
                     
                 elif Config().pattern > 1 and match_single(path):
-                    manager.add_work(path)
+                    self.mgr.add_work(path)
                     dirs.remove(d)
 
 
@@ -585,7 +586,7 @@ class ParentWorker(Worker):
         lis =  os.getcwd().split(os.sep)
         for i in range(len(lis)-1, 0, -1):
             path = string.join(lis[:i] + [''], os.sep)
-            manager.path_notify(path)
+            self.mgr.path_notify(path)
 
 
 class Manager(object):
@@ -593,20 +594,19 @@ class Manager(object):
     class FullException: pass
 
     def __init__(self):
-        self.pathList = PathList()
+        self.path_list = PathList()
         self.optionalList = PathList()
         self.__state_observers = []
         self.__path_observers = []
-        self.cfg = Config()
-        self.exclude = self.cfg.exclude[:]
+        self.exclude = Config().exclude[:]
 
         self.pending_lock = threading.Lock()
         self.pending = []
         
-        if self.cfg.parent_mode:
-            self.mainJob = self.parentMode_job
-        elif self.cfg.history_mode:
-            self.mainJob = self.historyMode_job
+        if Config().parent_mode:
+            self.main_job = self.parent_job
+        elif Config().history_mode:
+            self.main_job = self.history_job
 
         self.workers = []
         self.stop = threading.Event()
@@ -615,20 +615,20 @@ class Manager(object):
         self.tinit = time.time()
 
 
-    def createWorker(self, workerClass, root = None, **kargs):
+    def create_worker(self, workerClass, root = None, **kargs):
         if self.stop.isSet(): return None
 
         if root in self.exclude:
-            logging.info("createWorker: '%s' previously exluded" % root)
+            logging.info("create_worker: '%s' previously exluded" % root)
             return None
 
         if root:
-            exclude_cp = [x for x in self.cfg.exclude if not root.startswith(x)]
+            exclude_cp = [x for x in Config().exclude if not root.startswith(x)]
             self.exclude.append(root)
         else:
-            exclude_cp = self.cfg.exclude[:]
+            exclude_cp = Config().exclude[:]
 
-        w = workerClass(root, exclude_cp, **kargs)
+        w = workerClass(self, root, exclude_cp, **kargs)
         self.workers.append(w)
 
         if hasattr(w, 'state_update'):
@@ -639,35 +639,34 @@ class Manager(object):
         w.start()
         return w
 
-    def parentMode_job(self):
-        self.createWorker(ParentWorker)
+    def parent_job(self):
+        self.create_worker(ParentWorker)
 
-    def historyMode_job(self):
+    def history_job(self):
         logging.info('go2: history mode')
-        self.createWorker(HistoryWorker, fname = GO2HISTORY)
+        self.create_worker(HistoryWorker, fname = GO2HISTORY)
 
-    def mainJob(self):
-        w = self.createWorker(HistoryWorker, fname = GO2HISTORY)
+    def main_job(self):
+        w = self.create_worker(HistoryWorker, fname = GO2HISTORY)
         if w: w.join(1)
 
         # if pattern is a current subdirectory name 
-        if len(self.cfg.pattern) == 1 and os.path.isdir(self.cfg.pattern[0]):
-            self.path_notify(os.path.abspath(self.cfg.pattern[0]))
+        if len(Config().pattern) == 1 and os.path.isdir(Config().pattern[0]):
+            self.path_notify(os.path.abspath(Config().pattern[0]))
 
-        w = self.createWorker(CacheWorker, fname = GO2CACHE)
+        w = self.create_worker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
 
         self.pending.extend(list(set([os.getcwd(), os.environ['HOME']])))
 
-        if self.cfg.from_root:
+        if Config().from_root:
             self.pending.append('/')
             return
 
         self.pending.extend(Config().include)
         
         
-
-    def waitJobsEnd(self):
+    def wait_jobs_end(self):
         #ocate_run = False
         locate_run = True  # never run locate
         while 1:
@@ -679,7 +678,7 @@ class Manager(object):
                 self.pending = self.pending[1:]
                 self.pending_lock.release()
 
-                manager.createWorker(DiskWorker, path)
+                self.create_worker(DiskWorker, path)
                 #manager.createWorker(FindWorker, path)
             
             if self.stop.isSet() or \
@@ -689,15 +688,15 @@ class Manager(object):
             select.select([],[],[], 0.25)  # espera pasiva
             if not locate_run and time.time() - self.tinit > 5:
                 locate_run = True
-                if self.cfg.locate:
-                    w = self.createWorker(LocateWorker)
+                if Config().locate:
+                    w = self.create_worker(LocateWorker)
 
 
 	if self.stop.isSet(): return
 
-        self.pathList.commit_delayed()
+        self.path_list.commit_delayed()
 
-        if len(self.pathList) == 0:
+        if len(self.path_list) == 0:
             self.state_notify(NOTFOUND)
             return
 
@@ -708,8 +707,8 @@ class Manager(object):
                           (id(w), w.__class__.__name__.ljust(13), w.count))
 
     def run(self):
-        self.mainJob()
-        self.waitJobsEnd()
+        self.main_job()
+        self.wait_jobs_end()
         while(self.__any_worker_alive()):
             select.select([],[],[], 0.5)  
 
@@ -729,8 +728,7 @@ class Manager(object):
         self.__state_observers.remove(ob)        
 
     def path_attach(self, ob):
-        self.pathList.attach(ob.path_update)
-        #self.__path_observers.append(ob)
+        self.path_list.attach(ob.path_update)
 		
     def state_notify(self, state):
         self.state = state
@@ -742,16 +740,15 @@ class Manager(object):
             self.state_notify(WAITING)
             self.stop.set()
 
-
     def path_notify(self, path):
         if self.state != WORKING: return
 
         if path == os.getcwd():
-            self.pathList.append_delayed(path)
+            self.path_list.append_delayed(path)
             return
 
         try:
-            self.pathList.append(path)
+            self.path_list.append(path)
         except PathList.AlreadyExistsException:
             return
         except self.FullException:
@@ -765,14 +762,14 @@ class Manager(object):
         return False
 
 
-    def setElection(self, election):
+    def set_election(self, election):
         if self.state == NOTFOUND: return
         self.stop.set()
         if election == None:
             self.state_notify(CANCELED)
             return
 
-        self.dirname = self.pathList[election]
+        self.dirname = self.path_list[election]
 
         if self.dirname == os.getcwd():
             self.state_notify(SKIP)
@@ -784,8 +781,8 @@ class Manager(object):
             
         self.state_notify(FINISH)
 
-        if self.cfg.cmd:
-            cmd = self.cfg.cmd
+        if Config().cmd:
+            cmd = Config().cmd
             cmdlist = cmd.split()
 
             for i in range(len(cmdlist)):
@@ -988,7 +985,7 @@ class GtkFrontend:
         return widget
         
 
-    def config(self):
+    def update_config(self):
         cfg = Config()
         cfg.pattern = self.wg_entry.get_text().split()
         cfg.parse_pattern()
@@ -1007,10 +1004,8 @@ class GtkFrontend:
         gtk.main()
 
     def work(self):
-        global manager
-
         try:
-            self.config()
+            self.update_config()
         except Config.EmptyPatternException:
             logging.debug('Falta diálogo de error, vacio')
             gobject.idle_add(self.gui_reset)
@@ -1021,10 +1016,10 @@ class GtkFrontend:
 
         try:
             gobject.idle_add(self.gui_working)
-            manager = Manager()
-            manager.path_attach(self)
-            manager.state_attach(self)
-            manager.run()
+            self.manager = Manager()
+            self.manager.path_attach(self)
+            self.manager.state_attach(self)
+            self.manager.run()
         except AttributeError, e:
             print e
 
@@ -1065,17 +1060,17 @@ class GtkFrontend:
         thread.start_new_thread(self.work, ())
 
     def on_button_cancel_clicked(self, wd):
-        manager.setElection(None)
+        self.manager.set_election(None)
         self.gui_reset()
        
     def on_button_clean_clicked(self, wd):
         self.gui_reset()
 
     def on_button_go_clicked(self, wd):
-        #FIXME: controlar selección vacía
-        self.config()
+        self.update_config()
         model, it = self.selection.get_selected()
-        manager.setElection(model[it][1])
+        if it == None: return # no hay selección
+        self.manager.set_election(model[it][1])
         gtk.main_quit()
 
     def offline_path_update(self, path):
@@ -1104,7 +1099,7 @@ class GtkFrontend:
             self.wg_button_search.set_sensitive(True)
             self.wg_button_cancel.set_sensitive(False)
             self.wg_button_clean.set_sensitive(True)
-            self.progressbar_text('Ready: %d matches' % len(manager.pathList))
+            self.progressbar_text('Ready: %d matches' % len(self.manager.path_list))
 
         if state == CANCELED:
             pass
@@ -1117,10 +1112,9 @@ class GtkFrontend:
 
 
 def console_main(argv):
-    global manager
-
     try:
-        Config(argv).parse_pattern()
+        config = Config(argv)
+        config.parse_pattern()
     except Config.EmptyPatternException:
         sys.exit(usage())
     except Config.NoValidPatternException:
@@ -1133,10 +1127,11 @@ def console_main(argv):
     #signal.signal(signal.SIGTERM, leaveAdvice)
        
     manager = Manager()
-    R = ConsoleUI(Config().list_only)
-    R.start()
+    console = ConsoleUI(manager)
+   
+    console.start()
     manager.run()
-    R.join()
+    console.join()
 
 
 
