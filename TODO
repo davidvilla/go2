@@ -1,5 +1,4 @@
 
-
 - en las rutas relativas al home del usuario actual cambiar $(HOME) por ~ [OK]
 
 - Guardar en un fichero las rutas a ignorar $HOME/.go/ignore [OK]
