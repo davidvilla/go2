@@ -1,6 +1,9 @@
 -*- coding: utf-8 -*-
 
-208-02-21:
+2008-05-08:
+        * Now, the current directory is always the first entry
+
+2008-02-21:
 	* Bug fix: go2 finish when "pending" work left
 	* Feature: New file with mandatory "include"s
 
