@@ -250,7 +250,7 @@ class ConsoleUI(threading.Thread):
 	elif state == WORKING:
             rprint('Searching...')
         elif state == SKIP:
-            rprint("That's the current folder, nothing to be done\n")
+            rprint("That's the current directory, nothing to be done\n")
 	else:
 	    rprint("Internal ERROR: unknown state '%d'\n" % state)
 
@@ -269,7 +269,7 @@ class ConsoleUI(threading.Thread):
 
         msg = ''
         if path == os.getcwd():
-            msg = '   <- current'
+            msg = '(the current directory)'              -
 
         path = highlight(Config().pattern,
                          path, self.HIGH, self.LOW).\
