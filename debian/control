@@ -3,7 +3,7 @@ Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl
-Standards-Version: 3.7.2
+Standards-Version: 3.7.3
 XS-Python-Version: all
 
 Package: go2
