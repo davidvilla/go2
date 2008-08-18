@@ -38,16 +38,18 @@ ESC = 27
 ENTER = 13
 
 #FILES
-GO2DIR =     os.path.join(os.environ['HOME'], '.go2')
+USERDIR    = os.environ['HOME']
+GO2DIR     = os.path.join(USERDIR, '.go2')
 GO2INCLUDE = os.path.join(GO2DIR, 'include')
 GO2EXCLUDE = os.path.join(GO2DIR, 'exclude')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
-GO2CACHE =   os.path.join(GO2DIR, 'cache')
-GO2CONFIG =  os.path.join(GO2DIR, 'config')
-GO2TMP =     os.path.join(GO2DIR, 'tmp')
-GO2LOG =     os.path.join(GO2DIR, 'log')
-GO2GUI = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
+GO2CACHE   = os.path.join(GO2DIR, 'cache')
+GO2CONFIG  = os.path.join(GO2DIR, 'config')
+GO2TMP     = os.path.join(GO2DIR, 'tmp')
+GO2LOG     = os.path.join(GO2DIR, 'log')
+GO2GUI     = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
 #GO2GUI = os.environ['HOME'] + '/repos/go2/trunk/go2.glade2'
+
 
 # states
 WORKING, WAITING, CANCELED, \
@@ -89,7 +91,7 @@ def hidden(path):
     return (os.sep + '.') in path
 
 def is_mine(path):
-    return path.startswith(os.environ['HOME'])
+    return path.startswith(USERDIR)
 
 #--
 
@@ -269,11 +271,11 @@ class ConsoleUI(threading.Thread):
 
         msg = ''
         if path == os.getcwd():
-            msg = '(the current directory)'              -
+            msg = ' (the current directory)'
 
         path = highlight(Config().pattern,
                          path, self.HIGH, self.LOW).\
-                         replace(os.environ['HOME'], '~')
+                         replace(USERDIR, '~')
 
         rprint("%c: %s%s\n" % (chr(self.__index), path.ljust(16), msg))
         rprint('\rSearching...')
@@ -423,7 +425,6 @@ class HistoryWorker(Worker):
 
             self.log.debug (i)
             if Config().match_func(i):
-
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -443,6 +444,7 @@ class HistoryWorker(Worker):
         self.pFile.commit()
 
 
+# save all directories that appears in any seach
 class CacheWorker(Worker):
 
     def __init__(self, *args, **kargs):
@@ -454,7 +456,6 @@ class CacheWorker(Worker):
         self.log.debug("[New, len:%s]" % len(self.pFile.data))
 
     def run(self):
-
         for i in self.pFile.data:
             if self.mgr.stop.isSet(): return
 
@@ -472,7 +473,7 @@ class CacheWorker(Worker):
         self.pFile.insert(path)
 
     def state_update(self, state):
-        if state == FINISH:
+        if state in (FINISH, CANCELED):
             for i in self.drop: self.pFile.data.remove(i)
             if self.mgr.dirname in self.pFile.data:
                 self.pFile.data.remove(self.mgr.dirname)
@@ -611,6 +612,7 @@ class Manager(object):
         self.state = WORKING
 
         self.tinit = time.time()
+        self.dirname = None
 
 
     def create_worker(self, workerClass, root = None, **kargs):
@@ -658,7 +660,7 @@ class Manager(object):
         w = self.create_worker(CacheWorker, fname = GO2CACHE)
         if w: w.join(1)
 
-        self.pending.extend(list(set([os.getcwd(), os.environ['HOME']])))
+        self.pending.extend(list(set([os.getcwd(), USERDIR])))
 
         if Config().from_root:
             self.pending.append('/')
@@ -914,7 +916,7 @@ class Config(object):
             raise self.EmptyPatternException
 
         if self.pattern[0] == '.':
-            p = pathFile(GO2HISTORY)
+            p = PathFile(GO2HISTORY)
             p.insert(os.getcwd())
             p.commit()
             sys.exit(0)
@@ -1072,7 +1074,7 @@ class GtkFrontend:
 
     def offline_path_update(self, path):
         tagged_path = highlight(Config().pattern, path, '<b>', '</b>').\
-                      replace(os.environ['HOME'], '~')
+                      replace(USERDIR, '~')
 
         self.store.append([tagged_path, self.__n])
 
@@ -1131,12 +1133,30 @@ def console_main(argv):
     console.join()
 
 
+class Dummy(): pass
 
 if __name__ == '__main__':
 
     argv = sys.argv[:]
     if os.path.exists(GO2CONFIG):
         argv[1:1]  = file(GO2CONFIG).read().split()
+
+    if '--cd' in argv:
+        if len(argv) != 3:
+            saveTarget(USERDIR)
+            sys.exit(0)
+
+        target = os.path.abspath(argv[2])
+        if not os.path.exists(target):
+            saveTarget(argv[2])
+            sys.exit(1)
+        
+        hist = PathFile(GO2HISTORY, 500)
+        hist.insert(target)
+        hist.commit()
+        saveTarget(target)
+        sys.exit(0)
+
 
     if '--log' in argv or '--debug' in argv:
         logging.basicConfig(level=logging.DEBUG,

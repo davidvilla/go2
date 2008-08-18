@@ -1,3 +1,9 @@
+go2 (0.080818) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@uclm.es>  Mon, 18 Aug 2008 22:57:44 +0200
+
 go2 (0.080507) unstable; urgency=low
 
   * minimal changes

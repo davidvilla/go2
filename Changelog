@@ -1,5 +1,10 @@
 -*- coding: utf-8 -*-
 
+2008-08-18:
+	* Feature: --cd option to emulate 'cd' but storing directory
+	  changes. 
+	* go.sh: alias for 'cd'
+	
 2008-05-08:
         * Now, the current directory is always the first entry
 
