@@ -1141,16 +1141,17 @@ if __name__ == '__main__':
     if os.path.exists(GO2CONFIG):
         argv[1:1]  = file(GO2CONFIG).read().split()
 
-    if '--cd' in argv:
-        if len(argv) != 3:
+    if '--cd' == argv[1]:
+        if len(argv) == 2:
             saveTarget(USERDIR)
             sys.exit(0)
 
-        target = os.path.abspath(argv[2])
+        args = ' '.join(argv[2:])
+        target = os.path.abspath(args)
         if not os.path.exists(target):
-            saveTarget(argv[2])
+            saveTarget(args)
             sys.exit(1)
-        
+
         hist = PathFile(GO2HISTORY, 500)
         hist.insert(target)
         hist.commit()
