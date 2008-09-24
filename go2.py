@@ -1146,8 +1146,14 @@ if __name__ == '__main__':
             saveTarget(USERDIR)
             sys.exit(0)
 
-        args = ' '.join(argv[2:])
-        target = os.path.abspath(args)
+
+        try:
+            target = os.path.abspath(argv[2])
+        except OSError, e:
+            logging.error(e)
+            saveTarget(USERDIR)
+            sys.exit(0)
+        
         if not os.path.exists(target):
             saveTarget(args)
             sys.exit(1)
