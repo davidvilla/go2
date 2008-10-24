@@ -1,3 +1,9 @@
+go2 (0.081024) unstable; urgency=low
+
+  * bug fix: directories names with spaces
+
+ -- David Villa Alises <David.Villa@uclm.es>  Fri, 24 Oct 2008 22:04:46 +0200
+
 go2 (0.080818) unstable; urgency=low
 
   * New release

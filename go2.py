@@ -1146,19 +1146,19 @@ if __name__ == '__main__':
             saveTarget(USERDIR)
             sys.exit(0)
 
-
+        params = ' '.join(argv[2:])
         try:
-            target = os.path.abspath(argv[2])
+            target = os.path.abspath(params)
         except OSError, e:
             logging.error(e)
             saveTarget(USERDIR)
             sys.exit(0)
         
         if not os.path.exists(target):
-            saveTarget(args)
+            saveTarget(params)
             sys.exit(1)
 
-        hist = PathFile(GO2HISTORY, 500)
+        hist = PathFile(GO2HISTORY, 1000)
         hist.insert(target)
         hist.commit()
         saveTarget(target)
