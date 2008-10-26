@@ -1,3 +1,9 @@
+go2 (0.081026) unstable; urgency=low
+
+  * bug fix: args parsing for no arguments
+
+ -- David Villa Alises <David.Villa@uclm.es>  Sun, 26 Oct 2008 17:18:09 +0100
+
 go2 (0.081024) unstable; urgency=low
 
   * bug fix: directories names with spaces

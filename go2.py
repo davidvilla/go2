@@ -1141,7 +1141,7 @@ if __name__ == '__main__':
     if os.path.exists(GO2CONFIG):
         argv[1:1]  = file(GO2CONFIG).read().split()
 
-    if '--cd' == argv[1]:
+    if len(argv) > 1 and '--cd' == argv[1]:
         if len(argv) == 2:
             saveTarget(USERDIR)
             sys.exit(0)

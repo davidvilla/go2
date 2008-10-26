@@ -1,10 +1,13 @@
 -*- coding: utf-8 -*-
 
+2008-08-30:
+	* Bug fix: directory names containing spaces in --cd mode.
+
 2008-08-18:
 	* Feature: --cd option to emulate 'cd' but storing directory
-	  changes. 
+	  changes.
 	* go.sh: alias for 'cd'
-	
+
 2008-05-08:
         * Now, the current directory is always the first entry
 
@@ -17,15 +20,15 @@
 
 2008-01-07:
 	* Feature: Search in children of visited directories (HistoryWorker)
-	
+
 2007-12-14:
 	* Feature: FindWorker added
 	* Feature: New "list-only" mode
-	
+
 2007-12-09
 	* Feature: If current folder match, it appears at end
 	* Feature: Follows links in not-root searching
-	
+
 2007-03-21
 	* Feature: New option --no-locale
 	* Deleted: opt.force_search
@@ -35,20 +38,20 @@
 
 2007-03-XX
 	* Feature: New DiskWorkers are created for directories that
-	match first item in composite patterns	
-	
-2006-08-05 
+	match first item in composite patterns
+
+2006-08-05
 	* BugFix: Pattern matching with current directory fixed. 'opt' has now
 	the user original pattern and a 're_pattern' for regular expressions.
 
-2006-07-29 
+2006-07-29
 	* BugFix: Actually stops when pathList is FULL
 	* Feature: Option -i to 'case insensitive' and highlight the matching portion
 	* Feature: Option -r to search (also) from root directory
 	* Feature: Option -H to enable "history ONLY search"
 	* BugFix:  Fixed pathList management in cacheWorker and historyWorker, they modified
 	           the iterated list losing items.
-	
-2006-07-26 
+
+2006-07-26
 	* Feature: If pattern match a existing subdirectory, it appear in first position
-	* Feature: Setup mode: go2 --setup 
+	* Feature: Setup mode: go2 --setup
