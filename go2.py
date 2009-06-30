@@ -273,6 +273,9 @@ class ConsoleUI(threading.Thread):
         if path == os.getcwd():
             msg = ' (the current directory)'
 
+        if self.__matches == 1:
+            msg += ' [ENTER]'
+
         path = highlight(Config().pattern,
                          path, self.HIGH, self.LOW).\
                          replace(USERDIR, '~')
@@ -1153,7 +1156,7 @@ if __name__ == '__main__':
             logging.error(e)
             saveTarget(USERDIR)
             sys.exit(0)
-        
+
         if not os.path.exists(target):
             saveTarget(params)
             sys.exit(1)

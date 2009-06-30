@@ -1,3 +1,9 @@
+go2 (0.090630) unstable; urgency=low
+
+  * minimal changes
+
+ -- David Villa Alises <David.Villa@uclm.es>  Tue, 30 Jun 2009 12:42:58 +0100
+
 go2 (0.081026) unstable; urgency=low
 
   * bug fix: args parsing for no arguments
