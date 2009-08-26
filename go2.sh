@@ -7,5 +7,3 @@ function go2 {
 	    rm $GO2TMP > /dev/null
     fi
 }
-
-alias cd='go2 --cd'

@@ -811,7 +811,8 @@ def go2setup():
         print('go2 already configured, skipping.')
         return 1
 
-    os.system('echo "\n[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh" >> ~/.bashrc')
+    os.system('echo "\n[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh\nalias cd=\'go2 --cd\'" >> ~/.bashrc')
+
     print('Setting up go2. It will be ready in next shell session.')
     return 0
 
