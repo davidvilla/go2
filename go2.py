@@ -35,6 +35,7 @@ os.environ['LANG'] = 'C'
 
 
 ESC = 27
+CTRL_C = 3
 ENTER = 13
 
 #FILES
@@ -215,7 +216,7 @@ class ConsoleUI(threading.Thread):
             else:
                 key = ord(sys.stdin.read(1))
 
-	    if key == ESC:
+	    if key in [ESC, CTRL_C]:
 		election = None
 		break
 
@@ -800,7 +801,7 @@ class Manager(object):
 
 
 def leaveAdvice(*args):
-    print '\rWarning: Ctrl-C ignored, to abort press ESC.'
+    print '\n\nWarning: Ctrl-C ignored, to abort press ESC.'
 
 def break_handler(*args):
     print args
@@ -818,9 +819,9 @@ def go2setup():
 def usage():
     prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
     date = '$Date$'
-    version = date[9:17].replace('-','')
+    version = '0.'+date[9:17].replace('-','')
     print 'go2 is a fast directory finder.'
-    print '''This is version 0.%s, Copyright (C) 2007 David Villa Alises
+    print '''This is version %s, Copyright (C) 2007 David Villa Alises
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
 ''' % (version)
@@ -1125,7 +1126,7 @@ def console_main(argv):
 
 
     #signal.signal(signal.SIGQUIT, leaveAdvice)
-    #signal.signal(signal.SIGINT, leaveAdvice)
+    signal.signal(signal.SIGINT, leaveAdvice)
     #signal.signal(signal.SIGTERM, leaveAdvice)
 
     manager = Manager()
@@ -1139,6 +1140,13 @@ def console_main(argv):
 class Dummy(): pass
 
 if __name__ == '__main__':
+
+    try:
+        os.getcwd()
+    except OSError,e:
+        logging.error("Current directory does not exists!")
+        saveTarget(USERDIR)
+        sys.exit(1)
 
     argv = sys.argv[:]
     if os.path.exists(GO2CONFIG):
