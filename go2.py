@@ -800,8 +800,6 @@ class Manager(object):
             saveTarget(self.dirname)
 
 
-def leaveAdvice(*args):
-    print '\n\nWarning: Ctrl-C ignored, to abort press ESC.'
 
 def break_handler(*args):
     print args
@@ -1125,10 +1123,6 @@ def console_main(argv):
         print 'go2: invalid pattern', args
         sys.exit(1)
 
-
-    #signal.signal(signal.SIGQUIT, leaveAdvice)
-    signal.signal(signal.SIGINT, leaveAdvice)
-    #signal.signal(signal.SIGTERM, leaveAdvice)
 
     manager = Manager()
     console = ConsoleUI(manager)
