@@ -3,7 +3,7 @@
 
 # go2.py
 #
-# Copyright (C) 2004,2005,2006,2007 David Villa Alises
+# Copyright (C) 2004,2005,2006,2007,2008,2009 David Villa Alises
 #
 #
 # This program is free software; you can redistribute it and/or modify
@@ -820,7 +820,7 @@ def usage():
     date = '$Date$'
     version = '0.'+date[9:17].replace('-','')
     print 'go2 is a fast directory finder.'
-    print '''This is version %s, Copyright (C) 2007 David Villa Alises
+    print '''This is version %s, Copyright (C) 2007  David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
 ''' % (version)
