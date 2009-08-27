@@ -8,7 +8,7 @@ XS-Python-Version: all
 
 Package: go2
 Architecture: all
-Depends: ${python:Depends}
+Depends: ${misc:Depends}, ${python:Depends}
 Suggests: python-psyco, locate
 XB-Python-Version: ${python:Versions}
 Description: Fast directory finder
