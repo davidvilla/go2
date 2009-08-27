@@ -2,12 +2,13 @@
 
 DEB_PYTHON_SYSTEM=pycentral
 DBK2MAN_XSL=/usr/share/xml/docbook/stylesheet/nwalsh/manpages/docbook.xsl
+#DBK2MAN_XSL=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/manpages/docbook.xsl
 
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/python-distutils.mk
 
 build/go2::
-	xsltproc --nonet $(DBK2MAN_XSL) debian/go2.xml
+	xsltproc --nonet  --param man.charmap.use.subset "0" $(DBK2MAN_XSL) debian/go2.xml
 #	#/usr/bin/docbook-to-man debian/go2.sgml > go2.1
 
 clean::

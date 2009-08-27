@@ -1,3 +1,10 @@
+go2 (0.090827) unstable; urgency=low
+
+  * bug fix: non existing directories
+  * feature: C-c to cancel the search
+
+ -- David Villa Alises <David.Villa@uclm.es>  Thu, 27 Aug 2009 02:35:40 +0200
+
 go2 (0.090630) unstable; urgency=low
 
   * minimal changes
