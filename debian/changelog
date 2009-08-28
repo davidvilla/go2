@@ -2,6 +2,7 @@ go2 (0.090827) unstable; urgency=low
 
   * bug fix: non existing directories
   * feature: C-c to cancel the search
+  * ITP (Closes #543976)
 
  -- David Villa Alises <David.Villa@uclm.es>  Thu, 27 Aug 2009 02:35:40 +0200
 
@@ -103,7 +104,7 @@ go2 (0.2) unstable; urgency=low
 
 go2 (0.0.2-1) unstable; urgency=low
 
-  * Initial release 
+  * Initial release
 
  -- David Villa Alises <David.Villa@uclm.es>  Sun, 11 Mar 2007 18:01:19 +0100
- 
+
