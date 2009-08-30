@@ -33,6 +33,7 @@ import itertools
 
 os.environ['LANG'] = 'C'
 
+VERSION = '0.'+'$Date$'[7:17].replace('-','')
 
 ESC = 27
 CTRL_C = 3
@@ -817,13 +818,11 @@ def go2setup():
 
 def usage():
     prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
-    date = '$Date$'
-    version = '0.'+date[9:17].replace('-','')
     print 'go2 is a fast directory finder.'
     print '''This is version %s, Copyright (C) 2007  David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
 welcome to redistribute it under certain conditions; See COPYING for details.
-''' % (version)
+''' % (VERSION)
 
     print 'Usage: %s [options] <pattern>' % prgname
     print """

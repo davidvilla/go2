@@ -1,3 +1,10 @@
+go2 (0.20090829-1) unstable; urgency=low
+
+  * New upstream release.
+  * Changed go2 into non-native package (Closes: #544245).
+
+ -- David Villa Alises <David.Villa@uclm.es>  Sun, 30 Aug 2009 23:02:14 +0200
+
 go2 (0.090827) unstable; urgency=low
 
   * bug fix: non existing directories

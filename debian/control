@@ -2,6 +2,7 @@ Source: go2
 Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
+Uploaders: Francisco Moya <paco@debian.org>
 Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
 Standards-Version: 3.8.3
 Homepage: http://arco.esi.uclm.es/~david.villa/go2.html

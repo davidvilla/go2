@@ -3,6 +3,7 @@
 DEB_PYTHON_SYSTEM=pycentral
 DBK2MAN_XSL=/usr/share/xml/docbook/stylesheet/nwalsh/manpages/docbook.xsl
 #DBK2MAN_XSL=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/manpages/docbook.xsl
+VERSION=$(shell python -c "from go2 import VERSION; print VERSION")
 
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/python-distutils.mk
@@ -13,3 +14,11 @@ build/go2::
 
 clean::
 	-rm go2.1
+
+build-orig-source:
+	mkdir -p go2-$(VERSION)
+	tar --exclude=debian --exclude=\*~ --exclude=.svn --exclude=\*.pyc \
+		--exclude=go2-$(VERSION) -cf - . \
+		| ( cd go2-$(VERSION) && tar xf - )
+	tar -czf ../tarballs/go2_$(VERSION).orig.tar.gz go2-$(VERSION)
+	$(RM) -r go2-$(VERSION)
