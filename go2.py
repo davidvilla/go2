@@ -256,7 +256,7 @@ class ConsoleUI(threading.Thread):
         elif state == SKIP:
             rprint("That's the current directory, nothing to be done\n")
 	else:
-	    rprint("Internal ERROR: unknown state '%d'\n" % state)
+	    logging.critical("Internal ERROR: unknown state '%d'\n" % state)
 
 
     def path_update(self, path):
@@ -1170,20 +1170,20 @@ if __name__ == '__main__':
         sys.exit(0)
 
 
+
+    console = logging.StreamHandler()
+    formatter = logging.Formatter('\r%(levelname)-8s: %(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger().addHandler(console)
+
     if '--log' in argv or '--debug' in argv:
         logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
                         filename=GO2LOG)
-
     if '--debug' in argv:
-        console = logging.StreamHandler()
         console.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('\r%(levelname)-8s %(message)s')
-        console.setFormatter(formatter)
-        logging.getLogger().addHandler(console)
-
     else:
-        logging.getLogger().setLevel(logging.CRITICAL)
+        console.setLevel(logging.ERROR)
 
 
     logging.info("\n\n---------- [go2 '%s']" % sys.argv[1:])
@@ -1199,9 +1199,14 @@ if __name__ == '__main__':
         logging.warning("$DISPLAY isn't set, fallback console mode")
 
     if "--gui" in argv and has_DISPLAY:
-        import gobject
-        import gtk, gtk.glade
-        gobject.threads_init()
-        GtkFrontend(argv).main()
-    else:
-        console_main(argv)
+        try:
+            import gobject
+            import gtk, gtk.glade
+            gobject.threads_init()
+            GtkFrontend(argv).main()
+            sys.exit(1)
+
+        except ImportError:
+            logging.error("go2 requires python-gtk2 to provide GUI interaction.")
+
+    console_main(argv)

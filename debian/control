@@ -5,13 +5,13 @@ Maintainer: David Villa Alises <David.Villa@uclm.es>
 Uploaders: Francisco Moya <paco@debian.org>
 Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
 Standards-Version: 3.8.3
-Homepage: http://arco.esi.uclm.es/~david.villa/go2.html
+Homepage: http://savannah.nongnu.org/projects/go2/
 XS-Python-Version: all
 
 Package: go2
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}
-Suggests: python-psyco, locate
+Suggests: python-psyco, locate, python-gtk2
 XB-Python-Version: ${python:Versions}
 Description: Fast directory finder
  go2 provides a simple fast way to change to frequently visited
