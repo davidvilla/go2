@@ -138,9 +138,32 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
     </para>
 
     <para>
-      <command>&dhpackage;</command> is a program that finds
-      directories.
+      <command>&dhpackage;</command> is a program that finds (and
+      changes to) directories.
     </para>
+  </refsect1>
+
+  <refsect1 id="important">
+    <title>IMPORTANT</title>
+    <para>
+      <command>&dhpackage;</command> requires be loaded from the
+      shell. To do this include the next sentence in your
+      $HOME/.bashrc file:
+    </para>
+
+    <programlisting>
+[ -e /usr/lib/go2/go2.sh ] &amp;&amp; source /usr/lib/go2/go2.sh
+    </programlisting>
+
+    <para>
+      If your wish improve directory caching, you may include also the
+      next sentence:
+    </para>
+
+    <programlisting>
+alias cd='go2 --cd'
+    </programlisting>
+
   </refsect1>
   <refsect1 id="options">
     <title>OPTIONS</title>
@@ -148,7 +171,8 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
       This program follows the usual &gnu; command line syntax,
       with long options starting with two dashes (`-').  A summary of
       options is included below.  For a complete description, see the
-      <application>Info</application> files.</para>
+      <application>Info</application> files.
+    </para>
 
     <variablelist>
       <!-- Use the variablelist.term.separator and the
@@ -179,6 +203,12 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
           <para>List the history.</para>
         </listitem>
       </varlistentry>
+      <varlistentry>
+        <term><option>-l</option></term>
+        <listitem>
+          <para>list only, print matches and exists.</para>
+        </listitem>
+      </varlistentry>
 
     </variablelist>
   </refsect1>
@@ -206,10 +236,10 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
       the terms of the &gnu; General Public License, Version 2 any
 	  later version published by the Free Software Foundation.
     </para>
-	<para>
-	  On Debian systems, the complete text of the GNU General Public
-	  License can be found in /usr/share/common-licenses/GPL.
-	</para>
+    <para>
+      On Debian systems, the complete text of the GNU General Public
+      License can be found in /usr/share/common-licenses/GPL.
+    </para>
 
   </refsect1>
 
