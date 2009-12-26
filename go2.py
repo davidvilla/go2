@@ -1,4 +1,4 @@
-#! /usr/bin/python -u
+#!/usr/bin/python -u
 # -*- coding: utf-8 -*-
 
 # go2.py
@@ -322,7 +322,6 @@ class PathList(Observable):
         return len(self.data)
 
 
-
 def loadlines(fname):
     if not os.path.exists(fname): return []
 
@@ -488,7 +487,7 @@ class CacheWorker(Worker):
 class FindWorker(Worker):
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        self.log = logging.getLogger('Locate')
+        self.log = logging.getLogger('Find')
         self.log.debug("[%s] New FindWorker for '%s'" % (id(self), self.root))
 
     def run(self):
@@ -675,8 +674,8 @@ class Manager(object):
 
 
     def wait_jobs_end(self):
-        #ocate_run = False
-        locate_run = True  # never run locate
+        locate_run = False
+        #locate_run = True  # never run locate
         while 1:
             if self.pending:
                 logging.debug('PENDIND: %s' % self.pending)
@@ -952,10 +951,8 @@ class GtkFrontend:
         for c in cmds:
             combo_model.append([c])
 
-        if cfg.cmd:
-            self.wg_combo_cmd.child.set_text(cfg.cmd)
-        else:
-            self.wg_combo_cmd.child.set_text(combo_model[0][0])
+        xcmd = cfg.cmd if cfg.cmd else combo_model[0][0]
+        self.wg_combo_cmd.child.set_text(xcmd)
 
         # setup treeview
         self.store = gtk.ListStore(str, int)
@@ -1008,7 +1005,7 @@ class GtkFrontend:
         try:
             self.update_config()
         except Config.EmptyPatternException:
-            logging.debug('Falta diálogo de error, vacio')
+            logging.debug('Falta diálogo de error, vacío')
             gobject.idle_add(self.gui_reset)
             return
         except Config.NoValidPatternException:
@@ -1026,7 +1023,7 @@ class GtkFrontend:
 
 
     def gui_reset(self, entry='', progress=''):
-        if entry != None:
+        if not entry is None:
             self.wg_entry.set_text(entry)
         self.wg_entry.grab_focus()
         self.wg_button_search.set_sensitive(True)
@@ -1102,9 +1099,6 @@ class GtkFrontend:
             self.wg_button_clean.set_sensitive(True)
             self.progressbar_text('Ready: %d matches' % len(self.manager.path_list))
 
-        if state == CANCELED:
-            pass
-
         return False
 
     def state_update(self, state):
@@ -1134,7 +1128,6 @@ def console_main(argv):
 class Dummy(): pass
 
 if __name__ == '__main__':
-
     try:
         os.getcwd()
     except OSError,e:
@@ -1170,7 +1163,6 @@ if __name__ == '__main__':
         sys.exit(0)
 
 
-
     console = logging.StreamHandler()
     formatter = logging.Formatter('\r%(levelname)-8s: %(message)s')
     console.setFormatter(formatter)
@@ -1178,8 +1170,9 @@ if __name__ == '__main__':
 
     if '--log' in argv or '--debug' in argv:
         logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
-                        filename=GO2LOG)
+            format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
+            filename=GO2LOG)
+
     if '--debug' in argv:
         console.setLevel(logging.DEBUG)
     else:
@@ -1196,7 +1189,7 @@ if __name__ == '__main__':
 
     has_DISPLAY = os.environ.has_key("DISPLAY")
     if not has_DISPLAY:
-        logging.warning("$DISPLAY isn't set, fallback console mode")
+        logging.warning("$DISPLAY isn't set, fallback to console mode")
 
     if "--gui" in argv and has_DISPLAY:
         try:
