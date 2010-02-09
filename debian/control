@@ -3,7 +3,7 @@ Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Uploaders: Francisco Moya <paco@debian.org>
-Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
+Build-Depends: cdbs, debhelper (>= 5), python, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
 Standards-Version: 3.8.4
 Homepage: http://savannah.nongnu.org/projects/go2/
 XS-Python-Version: all

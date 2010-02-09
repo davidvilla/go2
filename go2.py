@@ -458,11 +458,6 @@ class CmdWorker(Worker):
                            (id(self), self.name, self.root))
 
     def run(self, cmd):
-        name = '-name'
-        if config.ignorecase:
-            name = '-iname '
-        cmd = 'find %s -type d %s "%s*"' % (self.root, name, config.pattern[-1])
-        # FIXME: puede que find no exista
         self.ps = subprocess.Popen(cmd, shell=True,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
@@ -776,6 +771,7 @@ class Manager(object):
                    not (self.__any_worker_alive() or self.pending):
                 break
 
+            # FIXME: capturar C-c
             select.select([],[],[], 0.25)  # espera pasiva
 
             # Arranca un LocateWorker a los 5 segundos del arranque
@@ -805,6 +801,7 @@ class Manager(object):
         self.main_job()
         self.wait_jobs_end()
         while(self.__any_worker_alive()):
+            # FIXME: capturar C-c
             select.select([],[],[], 0.5)
 
 
@@ -874,7 +871,7 @@ class Manager(object):
 
         if config.cmd:
             cmd = config.cmd
-            cmdlist = cmd.split()
+            cmdlist = cmd.split() + [self.dirname]
 
             for i in range(len(cmdlist)):
                 if '%d' in cmdlist[i]:
