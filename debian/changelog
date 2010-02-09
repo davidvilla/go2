@@ -1,6 +1,13 @@
 go2 (0.20100209-1) unstable; urgency=low
 
   * New upstream release.
+  * debian/control suggests python-gtk2 (Closes: #545249)
+  * Documentation improved (Closes: #545247)
+    * Homepage translated to english.
+    * manpage now includes all options.
+    * manpage has a new 'important' section about sourcing /usr/lib/go2/go2.sh
+    * --help now includes all options.
+
 
  -- David Villa Alises <David.Villa@uclm.es>  Tue, 09 Feb 2010 16:38:28 +0100
 

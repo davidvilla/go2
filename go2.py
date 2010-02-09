@@ -28,8 +28,9 @@ import signal
 import string
 import time
 import logging
-import getopt
+import optparse
 import itertools
+import collections
 
 os.environ['LANG'] = 'C'
 
@@ -101,20 +102,13 @@ def filterout_hidden(pathlist):
     return [x for x in pathlist if not hidden(x)]
 
 def match_single(path):
-    path = Config().apply_case(path)
-
-    #if Config().ignorecase:
-    #    path = path.lower()
-
-    return os.path.basename(path).startswith(Config().pattern[0])
+    path = config.apply_case(path)
+    return os.path.basename(path).startswith(config.pattern[0])
 
 def match_multi(path):
-    path = Config().apply_case(path)
+    path = config.apply_case(path)
 
-    #if Config().ignorecase:
-    #    path = path.lower()
-
-    pattern = Config().pattern
+    pattern = config.pattern
     items = path.split(os.sep)[1:]
 
     match = items[-1].startswith(pattern[-1])
@@ -134,7 +128,7 @@ def highlight(pattern, path, before, after, flags=0):
     p = len(pattern) - 1
     for i in range(len(items)-1,-1,-1):
         if p < 0: break
-        if Config().apply_case(items[i]).startswith(Config().apply_case(pattern[p])):
+        if config.apply_case(items[i]).startswith(config.apply_case(pattern[p])):
             orig = items[i][:len(pattern[p])]
             items[i] = items[i].replace(orig,
                                         before + orig + after, 1)
@@ -183,7 +177,7 @@ class ConsoleUI(threading.Thread):
         self.__clean_prompt = len('Select a path:  ') * ' '
         self.log = logging.getLogger('ConsoleUI')
 
-        if not Config().list_only:
+        if not config.list_only:
             self.__mgr.state_attach(self)
 
         self.__mgr.path_attach(self)
@@ -199,7 +193,7 @@ class ConsoleUI(threading.Thread):
         tty.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def run(self):
-        if Config().list_only: return
+        if config.list_only: return
 
         self.old_settings = tty.tcgetattr(sys.stdin)
         tty.setraw(sys.stdin)
@@ -270,8 +264,9 @@ class ConsoleUI(threading.Thread):
 
         assert self.__state == WORKING
 
-        if Config().list_only:
-            rprint("%s\n" % path)
+        if config.list_only:
+            #rprint("%s\n" % path)
+            print(path)
             return
 
         msg = ''
@@ -281,7 +276,7 @@ class ConsoleUI(threading.Thread):
         if self.__matches == 1:
             msg += ' [ENTER]'
 
-        path = highlight(Config().pattern,
+        path = highlight(config.pattern,
                          path, self.HIGH, self.LOW).\
                          replace(USERDIR, '~')
 
@@ -336,13 +331,13 @@ def loadlines(fname):
 
 class PathFile:
     "Manage a file holding a path set"
-    def __init__(self, filename, size = 100):
+    def __init__(self, filename, size = 1000):
         self.filename = filename
         self.size = size
         self.log = logging.getLogger('PathFile [%s]' % os.path.split(filename)[-1])
         self.data = loadlines(filename)
 
-        if not Config().process_hidden:
+        if not config.process_hidden:
             self.data = filterout_hidden(self.data)
 
     def insert(self, item):
@@ -386,7 +381,7 @@ class HistoryWorker(Worker):
         Worker.__init__(self, *args)
         self.fname = kargs['fname']
         self.drop = []
-        self.pFile = PathFile(self.fname, 500)
+        self.pFile = PathFile(self.fname)
         self.log = logging.getLogger('History')
         self.log.debug("[len:%s]" % len(self.pFile.data))
 
@@ -396,7 +391,7 @@ class HistoryWorker(Worker):
             if self.mgr.stop.isSet(): return
 
             self.log.debug (i)
-            if Config().match_func(i):
+            if config.match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -405,7 +400,8 @@ class HistoryWorker(Worker):
 
                 self.notify(i)
 
-            self.mgr.add_work(i) # search in all historic paths
+            if not config.history_mode:
+                self.mgr.add_work(i) # search in all historic paths
 
 
     def state_update(self, state):
@@ -423,7 +419,7 @@ class CacheWorker(Worker):
         Worker.__init__(self, *args)
         self.fname = kargs['fname']
         self.drop = []
-        self.pFile = PathFile(self.fname, 1000)
+        self.pFile = PathFile(self.fname)
         self.log = logging.getLogger('Cache')
         self.log.debug("[New, len:%s]" % len(self.pFile.data))
 
@@ -431,7 +427,7 @@ class CacheWorker(Worker):
         for i in self.pFile.data:
             if self.mgr.stop.isSet(): return
 
-            if Config().match_func(i):
+            if config.match_func(i):
                 if not os.path.exists(i):
                     self.drop.append(i)
                     continue
@@ -462,6 +458,11 @@ class CmdWorker(Worker):
                            (id(self), self.name, self.root))
 
     def run(self, cmd):
+        name = '-name'
+        if config.ignorecase:
+            name = '-iname '
+        cmd = 'find %s -type d %s "%s*"' % (self.root, name, config.pattern[-1])
+        # FIXME: puede que find no exista
         self.ps = subprocess.Popen(cmd, shell=True,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
@@ -471,10 +472,10 @@ class CmdWorker(Worker):
 
         exclude = PathAsserts()
         exclude.add(lambda x: not os.path.isdir(x))
-        if not Config().process_hidden: exclude.add(hidden)
-        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
+        if not config.process_hidden: exclude.add(hidden)
+        if not config.from_root:      exclude.add(lambda x: not is_mine(x))
         exclude.add(self.is_excluded)
-        exclude.add(lambda x: not Config().match_func(x))
+        exclude.add(lambda x: not config.match_func(x))
 
         for i in self.ps.stdout:
             if self.mgr.stop.isSet():
@@ -503,10 +504,10 @@ class CmdWorker(Worker):
 class FindWorker(CmdWorker):
     def run(self):
         name = '-name'
-        if Config().ignorecase:
+        if config.ignorecase:
             name = '-iname '
         cmd = 'find %s -type d %s "a%s*"' % \
-            (self.root, name, Config().pattern[-1])
+            (self.root, name, config.pattern[-1])
 
         CmdWorker.run(self, cmd)
 
@@ -515,9 +516,9 @@ class LocateWorker(CmdWorker):
     "Parse locate output"
     def run(self):
         options = '-l 1000 -e -b '
-        if Config().ignorecase:
+        if config.ignorecase:
             options += '-i '
-        cmd = 'locate %s %s' % (options, Config().pattern[0])
+        cmd = 'locate %s %s' % (options, config.pattern[0])
         CmdWorker.run(self, cmd)
 
 
@@ -629,7 +630,7 @@ class DiskWorker(Worker):
             self.log.warning(e)
 
         exclude = PathAsserts()
-        if not Config().process_hidden: exclude.add(hidden)
+        if not config.process_hidden: exclude.add(hidden)
         exclude.add(self.is_excluded)
 
         for root, dirs, files in os.walk(self.root, onerror=walkerror):
@@ -644,7 +645,7 @@ class DiskWorker(Worker):
                     dirs.remove(d)
                     continue
 
-#                if not Config().from_root and os.path.islink(path):
+#                if not config.from_root and os.path.islink(path):
 #                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
 #                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
 #                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
@@ -654,10 +655,10 @@ class DiskWorker(Worker):
 
                 if os.path.islink(path): continue
 
-                if Config().match_func(path):
+                if config.match_func(path):
                     self.notify(path)
 
-                elif Config().pattern > 1 and match_single(path):
+                elif config.pattern > 1 and match_single(path):
                     self.mgr.add_work(path)
                     dirs.remove(d)
 
@@ -680,15 +681,16 @@ class Manager(object):
         self.path_list = PathList()
         self.optionalList = PathList()
         self.__state_observers = []
-        self.__path_observers = []
-        self.exclude = Config().exclude[:]
+        self.__pathobservers = []
+        self.exclude = config.exclude[:]
 
-        self.pending_lock = threading.Lock()
-        self.pending = []
+        #self.pending_lock = threading.Lock()
+        #self.pending = []
+        self.pending = collections.deque()
 
-        if Config().parent_mode:
+        if config.parent_mode:
             self.main_job = self.parent_job
-        elif Config().history_mode:
+        elif config.history_mode:
             self.main_job = self.history_job
 
         self.workers = []
@@ -707,10 +709,10 @@ class Manager(object):
             return None
 
         if root:
-            exclude_cp = [x for x in Config().exclude if not root.startswith(x)]
+            exclude_cp = [x for x in config.exclude if not root.startswith(x)]
             self.exclude.append(root)
         else:
-            exclude_cp = Config().exclude[:]
+            exclude_cp = config.exclude[:]
 
         w = workerClass(self, root, exclude_cp, **kargs)
         self.workers.append(w)
@@ -728,29 +730,30 @@ class Manager(object):
 
     def history_job(self):
         logging.info('go2: history mode')
-        self.create_worker(HistoryWorker, fname = GO2HISTORY)
+        config.locate = False
+        self.create_worker(HistoryWorker, fname=GO2HISTORY)
 
     def main_job(self):
-        if Config().match_func(os.getcwd()):
+        if config.match_func(os.getcwd()):
             self.path_notify(os.getcwd())
 
         #if pattern is a current subdirectory name
-        if len(Config().pattern) == 1 and os.path.isdir(Config().pattern[0]):
-            self.path_notify(os.path.abspath(Config().pattern[0]))
+        if len(config.pattern) == 1 and os.path.isdir(config.pattern[0]):
+            self.path_notify(os.path.abspath(config.pattern[0]))
 
-        w = self.create_worker(HistoryWorker, fname = GO2HISTORY)
-        if w: w.join(1)
+        w = self.create_worker(HistoryWorker, fname=GO2HISTORY)
+        if w: w.join()
 
-        w = self.create_worker(CacheWorker, fname = GO2CACHE)
-        if w: w.join(1)
+        w = self.create_worker(CacheWorker, fname=GO2CACHE)
+        if w: w.join()
 
-        self.pending.extend(list(set([os.getcwd(), USERDIR])))
+        self.pending.extend(set([os.getcwd(), USERDIR]))
 
-        if Config().from_root:
+        if config.from_root:
             self.pending.append('/')
             return
 
-        self.pending.extend(Config().include)
+        self.pending.extend(config.include)
 
 
     def wait_jobs_end(self):
@@ -759,24 +762,27 @@ class Manager(object):
         while 1:
             if self.pending:
                 logging.debug('PENDIND: %s' % self.pending)
-            if self.pending and threading.activeCount() < 20:
-                path = self.pending[0]
-                self.pending_lock.acquire()
-                self.pending = self.pending[1:]
-                self.pending_lock.release()
+                if threading.activeCount() < 20:
+                    #path = self.pending[0]
+                    #self.pending_lock.acquire()
+                    #self.pending = self.pending[1:]
+                    #self.pending_lock.release()
 
-                #self.create_worker(DiskWorker, path)
-                #self.create_worker(FindWorker, path)
-                self.create_worker(TreeWorker, path)
+                    #self.create_worker(DiskWorker, self.pending.popleft())
+                    self.create_worker(TreeWorker, self.pending.popleft())
+
 
             if self.stop.isSet() or \
                    not (self.__any_worker_alive() or self.pending):
                 break
 
             select.select([],[],[], 0.25)  # espera pasiva
-            if not locate_run and time.time() - self.tinit > 5:
+
+            # Arranca un LocateWorker a los 5 segundos del arranque
+            if config.locate and not locate_run \
+                    and time.time() - self.tinit > 5:
                 locate_run = True
-                if Config().locate:
+                if config.locate:
                     w = self.create_worker(LocateWorker)
 
 
@@ -805,9 +811,9 @@ class Manager(object):
     def add_work(self, path):
         if path in self.pending or path in self.exclude: return
 
-        self.pending_lock.acquire()
+        #self.pending_lock.acquire()
         self.pending.append(path)
-        self.pending_lock.release()
+        #self.pending_lock.release()
 
 
     def state_attach(self, ob):
@@ -866,8 +872,8 @@ class Manager(object):
 
         self.state_notify(FINISH)
 
-        if Config().cmd:
-            cmd = Config().cmd
+        if config.cmd:
+            cmd = config.cmd
             cmdlist = cmd.split()
 
             for i in range(len(cmdlist)):
@@ -897,143 +903,139 @@ def go2setup():
     return 0
 
 
-def usage():
-    prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
-    print 'go2 is a fast directory finder.'
-    print '''This is version %s, Copyright (C) 2007  David Villa Alises.
-go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
-welcome to redistribute it under certain conditions; See COPYING for details.
-''' % (VERSION)
-
-    print 'Usage: %s [options] <pattern>' % prgname
-    print """
-options:
-  -i           ignore case                       (default: case sensitive)
-  -r           search in whole file system       (default: $HOME only)
-  -d           search into hidden directories    (default: skip hidden)
-  -H           list history
-  -l           list only, print matches and exit
-  --gui        GUI mode
-  --cmd <cmd>  exec 'cmd'                        (default: chdir)
-  --dir <dir>  search from 'dir' directory       (default: current)
-"""
-    return 1
+#def usage():
+#    prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+#    print 'go2 is a fast directory finder.'
+#    print '''This is version %s, Copyright (C) 2007  David Villa Alises.
+#go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
+#welcome to redistribute it under certain conditions; See COPYING for details.
+#''' % (VERSION)
+#
+#    print 'Usage: %s [options] <pattern>' % prgname
+#    print """
+#options:
+#  -i           ignore case                       (default: case sensitive)
+#  -r           search in whole file system       (default: $HOME only)
+#  -d           search into hidden directories    (default: skip hidden)
+#  -H           list history
+#  -l           list only, print matches and exit
+#  --gui        GUI mode
+#  --cmd <cmd>  exec 'cmd'                        (default: chdir)
+#  --dir <dir>  search from 'dir' directory       (default: current)
+#"""
+#    return 1
 
 
 
 ################################
 
-class Config(object):
+#class Config(object):
+#
+#    __metaclass__ = Singleton
+#
+#    class EmptyPatternException: pass
+#    class NoValidPatternException: pass
+#
+#    def __init__(self, argv=[]):
+#        self.history_mode = False
+#        self.parent_mode = False
+#        self.from_root = False
+#        self.ignorecase = False
+#        self.process_hidden = False
+#        self.locate = True
+#        self.list_only = False
+#        self.match_func = match_single
+#        self.pattern = None
+#        self.exclude = []
+#        self.include = []
+#        self.cmd = None
 
-    __metaclass__ = Singleton
+#        self.apply_case = lambda x:x
+#
+#        if not os.path.exists(GO2DIR):
+#            os.mkdir(GO2DIR)
+#
+#        # load file specified excluded paths
+#        self.exclude = loadlines(GO2EXCLUDE)
+#        if self.exclude: logging.debug('exclude: %s' % self.exclude)
+#
+#        self.include = loadlines(GO2INCLUDE)
+#        if self.include: logging.debug('include: %s' % self.include)
+#
+#
+#        try:
+#            opts, self.pattern = getopt.getopt(argv[1:], 'Hirdl',
+#                                               ['setup','no-locate', 'log',
+#                                                'debug', 'gui',
+#                                                'cmd=', 'dir='])
+#        except getopt.GetoptError:
+#            sys.exit(usage())
+#
+#        for o, a in opts:
+#            if o == '-i':
+#                self.ignorecase = True
+#                self.apply_case = string.lower
+#            if o == '-l':
+#                self.list_only = True
+#            if o == '-r':
+#                self.from_root = True
+#            if o == '-d':
+#                self.process_hidden = True
+#            if o == '-H':
+#                self.history_mode = True
+#                self.pattern = ['']    # hack para que todos hagan matching
+#                return
+#            if o == '--no-locate':
+#                self.locate = False
+#            if o == '--setup':
+#                sys.exit(go2setup())
+#            if o == '--cmd':
+#                self.cmd = a
+#            if o == '--dir':
+#                if os.path.isdir(a): dirname = a
+#                elif os.path.isfile(a):
+#                    dirname = os.path.split(a)[0]
+#                else: continue
+#                logging.debug('dir:  ' + dirname)
+#                os.chdir(dirname)
 
-    class EmptyPatternException: pass
-    class NoValidPatternException: pass
-
-    def __init__(self, argv=[]):
-        self.history_mode = False
-        self.parent_mode = False
-        self.from_root = False
-        self.ignorecase = False
-        self.process_hidden = False
-        self.locate = True
-        self.list_only = False
-        self.match_func = match_single
-        self.pattern = None
-        self.exclude = []
-        self.include = []
-        self.cmd = None
-
-        self.apply_case = lambda x:x
-
-        if not os.path.exists(GO2DIR):
-            os.mkdir(GO2DIR)
-
-        # load file specified excluded paths
-        self.exclude = loadlines(GO2EXCLUDE)
-        if self.exclude: logging.debug('exclude: %s' % self.exclude)
-
-        self.include = loadlines(GO2INCLUDE)
-        if self.include: logging.debug('include: %s' % self.include)
-
-
-
-        try:
-            opts, self.pattern = getopt.getopt(argv[1:], 'Hirdl',
-                                               ['setup','no-locate', 'log',
-                                                'debug', 'gui',
-                                                'cmd=', 'dir='])
-        except getopt.GetoptError:
-            sys.exit(usage())
-
-        for o, a in opts:
-            if o == '-i':
-                self.ignorecase = True
-                self.apply_case = string.lower
-            if o == '-l':
-                self.list_only = True
-            if o == '-r':
-                self.from_root = True
-            if o == '-d':
-                self.process_hidden = True
-            if o == '-H':
-                self.history_mode = True
-                self.pattern = ['']    # hack para que todos hagan matching
-                return
-            if o == '--no-locate':
-                self.locate = False
-            if o == '--setup':
-                sys.exit(go2setup())
-            if o == '--cmd':
-                self.cmd = a
-            if o == '--dir':
-                if os.path.isdir(a): dirname = a
-                elif os.path.isfile(a):
-                    dirname = os.path.split(a)[0]
-                else: continue
-                logging.debug('dir:  ' + dirname)
-                os.chdir(dirname)
-
-    def parse_pattern(self):
-        if not self.pattern:
-            raise self.EmptyPatternException
-
-        if self.pattern[0] == '.':
-            p = PathFile(GO2HISTORY)
-            p.insert(os.getcwd())
-            p.commit()
-            sys.exit(0)
-
-        if self.pattern[0] == '..':
-            self.parent_mode = True
-            self.pattern = ['']
-
-        if self.ignorecase:
-            self.pattern = [x.lower() for x in self.pattern]
-
-        if len(self.pattern) > 1:
-            self.match_func = match_multi
+#    def parse_pattern(self):
+#        if not self.pattern:
+#            raise self.EmptyPatternException
+#
+#        if self.pattern[0] == '.':
+#            p = PathFile(GO2HISTORY)
+#            p.insert(os.getcwd())
+#            p.commit()
+#            sys.exit(0)
+#
+#        if self.pattern[0] == '..':
+#            self.parent_mode = True
+#            self.pattern = ['']
+#
+#        if self.ignorecase:
+#            self.pattern = [x.lower() for x in self.pattern]
+#
+#        if len(self.pattern) > 1:
+#            self.match_func = match_multi
 
 
 
 class GtkFrontend:
-    def __init__(self, argv):
-        self.argv = argv
-        cfg = Config(argv)
-
+    def __init__(self):
         self.glade = gtk.glade.XML(GO2GUI)
         self.glade.signal_autoconnect(self)
 
         # load cmdline config
-        if cfg.pattern:
-            self.wg_entry.set_text(' '.join(cfg.pattern))
+        if config.pattern:
+            self.wg_entry.set_text(' '.join(config.pattern))
 
         cmds = ['gnome-terminal', 'nautilus %d', 'cd']
         combo_model = self.wg_combo_cmd.get_model()
         for c in cmds:
             combo_model.append([c])
 
-        xcmd = cfg.cmd if cfg.cmd else combo_model[0][0]
+        xcmd = config.cmd if config.cmd else combo_model[0][0]
         self.wg_combo_cmd.child.set_text(xcmd)
 
         # setup treeview
@@ -1066,19 +1068,16 @@ class GtkFrontend:
 
 
     def update_config(self):
-        cfg = Config()
-        cfg.pattern = self.wg_entry.get_text().split()
-        cfg.parse_pattern()
-
         # switches
-        cfg.from_root = self.wg_checkbutton_root.get_active()
-        cfg.ignorecase = self.wg_checkbutton_case.get_active()
+        config.from_root = self.wg_checkbutton_root.get_active()
+        config.ignorecase = self.wg_checkbutton_case.get_active()
+        config.process_hidden = not self.wg_checkbutton_hidden.get_active()
 
-        cfg.process_hidden = not self.wg_checkbutton_hidden.get_active()
+        config.cmd = self.wg_combo_cmd.child.get_text().strip()
+        if config.cmd == 'chdir':
+            config.cmd = None
 
-        cfg.cmd = self.wg_combo_cmd.child.get_text().strip()
-        if cfg.cmd == 'chdir':
-            cfg.cmd = None
+        config.update(self.wg_entry.get_text().split())
 
     def main(self):
         gtk.main()
@@ -1086,11 +1085,11 @@ class GtkFrontend:
     def work(self):
         try:
             self.update_config()
-        except Config.EmptyPatternException:
+        except Go2Config.EmptyPatternException:
             logging.debug('Falta diálogo de error, vacío')
             gobject.idle_add(self.gui_reset)
             return
-        except Config.NoValidPatternException:
+        except Go2Config.NoValidPatternException:
             logging.debug('Falta diálogo de error, no válido')
             return
 
@@ -1127,7 +1126,10 @@ class GtkFrontend:
         self.source_id = gobject.timeout_add(150, pulse)
 
     def progressbar_text(self, text):
-        gobject.source_remove(self.source_id)
+        if self.source_id:
+            gobject.source_remove(self.source_id)
+            self.source_id = None
+
         self.wg_progressbar.set_fraction(0)
         self.wg_progressbar.set_text(text)
 
@@ -1135,6 +1137,7 @@ class GtkFrontend:
         gtk.main_quit()
 
     def on_button_search_clicked(self, wd):
+        self.progressbar_text('')
         self.store.clear()
         self.__n = 0
         thread.start_new_thread(self.work, ())
@@ -1154,7 +1157,7 @@ class GtkFrontend:
         gtk.main_quit()
 
     def offline_path_update(self, path):
-        tagged_path = highlight(Config().pattern, path, '<b>', '</b>').\
+        tagged_path = highlight(config.pattern, path, '<b>', '</b>').\
                       replace(USERDIR, '~')
 
         self.store.append([tagged_path, self.__n])
@@ -1187,16 +1190,85 @@ class GtkFrontend:
         gobject.idle_add(self.offline_state_update, state)
 
 
+class Dummy(): pass
 
-def console_main(argv):
-    try:
-        config = Config(argv)
-        config.parse_pattern()
-    except Config.EmptyPatternException:
-        sys.exit(usage())
-    except Config.NoValidPatternException:
-        print 'go2: invalid pattern', args
-        sys.exit(1)
+
+
+class Go2Config(optparse.Values):
+
+    class EmptyPatternException: pass
+    class NoValidPatternException: pass
+
+    def __init__(self, values, pattern):
+        optparse.Values.__init__(self)
+        opts = dict([(k,v) for k,v in values.__dict__.items()
+                     if not k.startswith('_')])
+
+        self._update(opts, "loose")
+
+        self.pattern = pattern
+        self.parent_mode = False
+        self.match_func = match_single
+
+        if not os.path.exists(GO2DIR):
+            os.mkdir(GO2DIR)
+
+        # load file specified excluded paths
+        self.exclude = loadlines(GO2EXCLUDE)
+        if self.exclude:
+            logging.debug('exclude: %s' % self.exclude)
+
+        self.include = loadlines(GO2INCLUDE)
+        if self.include:
+            logging.debug('include: %s' % self.include)
+
+
+    def update(self, pattern=None):
+        pattern = pattern if not pattern is None else self.pattern
+
+        if not pattern is None:
+            self.pattern = pattern
+            if pattern[0].startswith('.'):
+                config.process_hidden = True
+
+        self.apply_case = string.lower if self.ignorecase else lambda x:x
+
+        if not self.pattern:
+            raise self.EmptyPatternException
+
+        if self.pattern[0] == '.':
+            p = PathFile(GO2HISTORY)
+            p.insert(os.getcwd())
+            p.commit()
+            sys.exit(0)
+
+        if self.pattern[0] == '..':
+            self.parent_mode = True
+            self.pattern = ['']
+
+        if self.ignorecase:
+            self.pattern = [x.lower() for x in self.pattern]
+
+        if len(self.pattern) > 1:
+            self.match_func = match_multi
+
+
+class Go2optionParser(optparse.OptionParser):
+
+    def parse_args(self):
+        config, args = optparse.OptionParser.parse_args(self)
+        return Go2Config(config, args), args
+
+
+def console_main():
+
+#    try:
+#        config.parse_pattern()
+#    except Go2Config.EmptyPatternException:
+#        sys.exit(usage())
+#    except Go2Config.NoValidPatternException:
+#        print 'go2: invalid pattern', args
+#        sys.exit(1)
 
 
     manager = Manager()
@@ -1207,8 +1279,6 @@ def console_main(argv):
     console.join()
 
 
-class Dummy(): pass
-
 if __name__ == '__main__':
     try:
         os.getcwd()
@@ -1217,16 +1287,72 @@ if __name__ == '__main__':
         saveTarget(USERDIR)
         sys.exit(1)
 
-    argv = sys.argv[:]
-    if os.path.exists(GO2CONFIG):
-        argv[1:1] = file(GO2CONFIG).read().split()
+    prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+    parser = Go2optionParser()
+    parser.set_usage('''go2 is a fast directory finder.
+This is version %s, Copyright (C) 2007,2008,2009 David Villa Alises.
+go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See COPYING
+for details.
 
-    if len(argv) > 1 and '--cd' == argv[1]:
-        if len(argv) == 2:
+Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
+
+    parser.add_option('--cd', dest='chdir', action="store_true",
+                      help="")
+    parser.add_option('--debug', action='store_true',
+                      help="")
+    parser.add_option('--gui', action='store_true',
+                      help="GUI mode")
+    parser.add_option('-H', '--history_mode',
+                      action='store_true',
+                      help="list history")
+    parser.add_option('-i', '--ignore-case', dest='ignorecase',
+                      action='store_true', default=False,
+                      help="ignore case search")
+    parser.add_option('-l', '--list-only', dest='list_only',
+                      action='store_true',
+                      help="list only, print matches and exit")
+    parser.add_option('--log', action='store_true',
+                      help="")
+    parser.add_option('-r', '--from-root', dest='from_root',
+                      action='store_true',
+                      help="search in whole file system")
+    parser.add_option('-d', '--dot-dirs', dest='process_hidden',
+                      action='store_true',
+                      help="search into hidden directories")
+    parser.add_option('--no-locate', dest='locate',
+                      action='store_false', default=True,
+                      help="do not start a locate worker")
+    parser.add_option('--setup',
+                      action='store_true',
+                      help="install go2 in your .bashrc")
+    parser.add_option('--cmd', dest='cmd',
+                      help="exec 'cmd' instead of 'chdir'")
+    parser.add_option('--basedir', dest='basedir',
+                      help="search from 'dir' directory")
+
+#    FIXME: argumentos en el fichero de config
+#
+#    if os.path.exists(GO2CONFIG):
+#        argv[1:1]  = file(GO2CONFIG).read().split()
+
+
+    try:
+        config, args = parser.parse_args()
+    except Go2Config.EmptyPatternException:
+        parser.print_help()
+        sys.exit(1)
+    except Go2Config.NoValidPatternException:
+        print 'go2: invalid pattern', args
+        sys.exit(1)
+
+
+    if config.chdir:
+        if not config.pattern:
             saveTarget(USERDIR)
             sys.exit(0)
 
-        params = str.join(' ', argv[2:])
+        params = ' '.join(args)
         try:
             target = os.path.abspath(params)
         except OSError, e:
@@ -1249,24 +1375,38 @@ if __name__ == '__main__':
                 sys.exit(1)
 
         else:
-            hist = PathFile(GO2HISTORY, 1000)
+            hist = PathFile(GO2HISTORY)
             hist.insert(target)
             hist.commit()
             saveTarget(target)
             sys.exit(0)
+
+
+    if config.basedir:
+        if os.path.isdir(a): dirname = a
+        elif os.path.isfile(a):
+            dirname = os.path.split(a)[0]
+
+        logging.debug('dir:  ' + dirname)
+        os.chdir(dirname)
+
+    if config.history_mode:
+        config.pattern = [''] # hack para que todos hagan matching
+
+    if config.setup:
+        sys.exit(go2setup())
 
     console = logging.StreamHandler()
     formatter = logging.Formatter('\r%(levelname)-8s: %(message)s')
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
 
-    if '--log' in argv or '--debug' in argv:
-        print "go2: log enabled"
+    if config.log or config.debug:
         logging.basicConfig(level=logging.DEBUG,
             format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
             filename=GO2LOG)
 
-    if '--debug' in argv:
+    if config.debug:
         logging.getLogger().setLevel(logging.DEBUG)
     else:
         logging.getLogger().setLevel(logging.ERROR)
@@ -1284,15 +1424,22 @@ if __name__ == '__main__':
     if not has_DISPLAY:
         logging.warning("$DISPLAY isn't set, fallback to console mode")
 
-    if "--gui" in argv and has_DISPLAY:
+    if config.gui and has_DISPLAY:
         try:
             import gobject
             import gtk, gtk.glade
             gobject.threads_init()
-            GtkFrontend(argv).main()
+            GtkFrontend().main()
             sys.exit(1)
 
         except ImportError:
             logging.error("go2 requires python-gtk2 to provide GUI interaction.")
 
-    console_main(argv)
+    if not config.pattern:
+        logging.error('No pattern given.')
+        parser.print_help()
+        sys.exit(1)
+
+    config.update()
+    console_main()
+

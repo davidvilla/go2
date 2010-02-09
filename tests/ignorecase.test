@@ -1,0 +1,13 @@
+# -*- mode:python; coding:utf-8 -*-
+
+t = Task('$basedir/go2.py -r -l ETC', shell=True,
+         timeout=20, save_stdout=True,
+         desc="Can't find the directory 'ETC'.")
+t.post += Not(FileContains(t.stdout, '/etc'))
+
+t = Task('$basedir/go2.py -r -l -i ETC', shell=True,
+         timeout=20, save_stdout=True,
+         desc="It find 'ETC' if ignorecase is active.")
+t.post += FileContains(t.stdout, '/etc')
+
+

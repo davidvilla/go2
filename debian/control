@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Uploaders: Francisco Moya <paco@debian.org>
 Build-Depends: cdbs, debhelper (>= 5), python-all-dev, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
-Standards-Version: 3.8.3
+Standards-Version: 3.8.4
 Homepage: http://savannah.nongnu.org/projects/go2/
 XS-Python-Version: all
 
@@ -13,18 +13,18 @@ Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, tree
 Suggests: python-psyco, locate, python-gtk2
 XB-Python-Version: ${python:Versions}
-Description: Fast directory finder
-  This package provides a mechanism for quickly changing directory on
-  the commandline, in the style of the old Norton Change Directory for
-  DOS, but designed specifically for bash.
-  .
-  Features:
-   * cache of recent searches;
-   * history list of visited directories;
-   * blacklist of directories not to search;
-   * configuration file for default options;
-   * multithreaded execution.
-  .
-  To activate go2, users need to source the appropriate function in
-  their ~/.bashrc - see man page for details.
+Description:Fast directory finder
+ This package provides a mechanism for quickly changing directory on
+ the commandline, in the style of the old Norton Change Directory for
+ DOS, but designed specifically for bash.
+ .
+ Features:
+  * cache of recent searches;
+  * history list of visited directories;
+  * blacklist of directories not to search;
+  * configuration file for default options;
+  * multithreaded execution.
+ .
+ To activate go2, users need to source the appropriate function in
+ their ~/.bashrc - see man page for details.
 
