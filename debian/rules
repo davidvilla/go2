@@ -10,7 +10,6 @@ include /usr/share/cdbs/1/class/python-distutils.mk
 
 build/go2::
 	xsltproc --nonet  --param man.charmap.use.subset "0" $(DBK2MAN_XSL) debian/go2.xml
-#	#/usr/bin/docbook-to-man debian/go2.sgml > go2.1
 
 clean::
 	-rm go2.1

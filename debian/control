@@ -10,10 +10,21 @@ XS-Python-Version: all
 
 Package: go2
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}
+Depends: ${misc:Depends}, ${python:Depends}, tree
 Suggests: python-psyco, locate, python-gtk2
 XB-Python-Version: ${python:Versions}
 Description: Fast directory finder
- go2 provides a simple fast way to change to frequently visited
- directories.
+  This package provides a mechanism for quickly changing directory on
+  the commandline, in the style of the old Norton Change Directory for
+  DOS, but designed specifically for bash.
+  .
+  Features:
+   * cache of recent searches;
+   * history list of visited directories;
+   * blacklist of directories not to search;
+   * configuration file for default options;
+   * multithreaded execution.
+  .
+  To activate go2, users need to source the appropriate function in
+  their ~/.bashrc - see man page for details.
 

@@ -3,7 +3,7 @@
 
 # go2.py
 #
-# Copyright (C) 2004,2005,2006,2007,2008,2009 David Villa Alises
+# Copyright © 2004,2005,2006,2007,2008,2009,2010 David Villa Alises
 #
 #
 # This program is free software; you can redistribute it and/or modify
@@ -188,6 +188,9 @@ class ConsoleUI(threading.Thread):
 
         self.__mgr.path_attach(self)
 
+    @classmethod
+    def high(cls, text):
+        return cls.HIGH + text + cls.LOW
 
     def __del__(self):
 	pass #self.ttyrestore()
@@ -371,44 +374,9 @@ class Worker(threading.Thread):
             if path.startswith(p): return True
         return False
 
-
-class LocateWorker(Worker):
-    "Parse locate output"
-    def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-        self.log = logging.getLogger('Locate')
-        self.log.debug("[New]")
-
-    def run(self):
-        options = '-l 1000 -e -b '
-        if Config().ignorecase:
-            options += '-i '
-        cmd = 'locate %s %s' % (options, Config().pattern[0])
-        self.log.debug('locate cmd: %s' % cmd)
-
-        locate = subprocess.Popen(cmd, shell=True,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  close_fds=True)
-
-        exclude = PathAsserts()
-        exclude.add(lambda x: not os.path.isdir(x))
-        if not Config().process_hidden: exclude.add(hidden)
-        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
-        exclude.add(self.is_excluded)
-        exclude.add(lambda x: not Config().match_func(x))
-
-        for i in locate.stdout:
-            if self.mgr.stop.isSet():
-                os.kill(locate.pid, signal.SIGKILL)
-                return
-
-            i = i.strip('\n')
-            self.log.debug(i)
-
-            if not exclude(i):
-                self.mgr.path_notify(i)
-
+    def notify(self, path):
+        self.count += 1
+        self.mgr.path_notify(path)
 
 
 class HistoryWorker(Worker):
@@ -435,7 +403,7 @@ class HistoryWorker(Worker):
 
                 if self.is_excluded(i): continue
 
-                self.mgr.path_notify(i)
+                self.notify(i)
 
             self.mgr.add_work(i) # search in all historic paths
 
@@ -470,7 +438,7 @@ class CacheWorker(Worker):
 
                 if self.is_excluded(i): continue
 
-                self.mgr.path_notify(i)
+                self.notify(i)
 
 
     def path_update(self, path):
@@ -484,24 +452,22 @@ class CacheWorker(Worker):
             self.pFile.commit()
 
 
-class FindWorker(Worker):
+class CmdWorker(Worker):
+    "A worker that process the output of the given command"
     def __init__(self, *args, **kargs):
         Worker.__init__(self, *args)
-        self.log = logging.getLogger('Find')
-        self.log.debug("[%s] New FindWorker for '%s'" % (id(self), self.root))
+        self.name = self.__class__.__name__
+        self.log = logging.getLogger(self.name)
+        self.log.debug("[%s] New %s for '%s'" % \
+                           (id(self), self.name, self.root))
 
-    def run(self):
-        name = '-name'
-        if Config().ignorecase:
-            name = '-iname '
-        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[-1])
-        # FIXME: puede que find no exista
+    def run(self, cmd):
         self.ps = subprocess.Popen(cmd, shell=True,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 close_fds=True)
 
-        logging.info('find cmd[%s]: %s' % (self.ps.pid, cmd))
+        self.log.info('%s cmd[%s]: %s' % (self.name, self.ps.pid, cmd))
 
         exclude = PathAsserts()
         exclude.add(lambda x: not os.path.isdir(x))
@@ -516,11 +482,11 @@ class FindWorker(Worker):
                 os.kill(self.ps.pid, signal.SIGKILL)
                 break
 
-            i = i.strip('\n')
+            i = os.path.abspath(i.strip('\n'))
             self.log.debug(i)
 
             if exclude(i): continue
-            self.mgr.path_notify(i)
+            self.notify(i)
 
         self.mgr.state_detach(self)
 
@@ -532,6 +498,121 @@ class FindWorker(Worker):
                 os.kill(self.ps.pid, signal.SIGKILL)
             except OSError, e:
                 rprint('\n %s %s \n' % (e, self.ps.pid))
+
+
+class FindWorker(CmdWorker):
+    def run(self):
+        name = '-name'
+        if Config().ignorecase:
+            name = '-iname '
+        cmd = 'find %s -type d %s "a%s*"' % \
+            (self.root, name, Config().pattern[-1])
+
+        CmdWorker.run(self, cmd)
+
+
+class LocateWorker(CmdWorker):
+    "Parse locate output"
+    def run(self):
+        options = '-l 1000 -e -b '
+        if Config().ignorecase:
+            options += '-i '
+        cmd = 'locate %s %s' % (options, Config().pattern[0])
+        CmdWorker.run(self, cmd)
+
+
+class TreeWorker(CmdWorker):
+    def run(self):
+        cmd = "tree -dfin --noreport %s" % self.root
+        CmdWorker.run(self, cmd)
+
+
+#class LocateWorker2(Worker):
+#    "Parse locate output"
+#    def __init__(self, *args, **kargs):
+#        Worker.__init__(self, *args)
+#        self.log = logging.getLogger('Locate')
+#        self.log.debug("[New]")
+#
+#    def run(self):
+#        options = '-l 1000 -e -b '
+#        if Config().ignorecase:
+#            options += '-i '
+#        cmd = 'locate %s %s' % (options, Config().pattern[0])
+#        self.log.debug('locate cmd: %s' % cmd)
+#
+#        locate = subprocess.Popen(cmd, shell=True,
+#                                  stdout=subprocess.PIPE,
+#                                  stderr=subprocess.PIPE,
+#                                  close_fds=True)
+#
+#        exclude = PathAsserts()
+#        exclude.add(lambda x: not os.path.isdir(x))
+#        if not Config().process_hidden: exclude.add(hidden)
+#        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
+#        exclude.add(self.is_excluded)
+#        exclude.add(lambda x: not Config().match_func(x))
+#
+#        for i in locate.stdout:
+#            if self.mgr.stop.isSet():
+#                os.kill(locate.pid, signal.SIGKILL)
+#                return
+#
+#            i = i.strip('\n')
+#            self.log.debug(i)
+#
+#            if not exclude(i):
+#                self.mgr.path_notify(i)
+#
+#
+#class FindWorker2(Worker):
+#    def __init__(self, *args, **kargs):
+#        Worker.__init__(self, *args)
+#        self.log = logging.getLogger('Find')
+#        self.log.debug("[%s] New FindWorker for '%s'" % (id(self), self.root))
+#
+#    def run(self):
+#        name = '-name'
+#        if Config().ignorecase:
+#            name = '-iname '
+#        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[-1])
+#        # FIXME: puede que find no exista
+#        self.ps = subprocess.Popen(cmd, shell=True,
+#                                stdout=subprocess.PIPE,
+#                                stderr=subprocess.PIPE,
+#                                close_fds=True)
+#
+#        logging.info('find cmd[%s]: %s' % (self.ps.pid, cmd))
+#
+#        exclude = PathAsserts()
+#        exclude.add(lambda x: not os.path.isdir(x))
+#        if not Config().process_hidden: exclude.add(hidden)
+#        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
+#        exclude.add(self.is_excluded)
+#        exclude.add(lambda x: not Config().match_func(x))
+#
+#        for i in self.ps.stdout:
+#            if self.mgr.stop.isSet():
+#                self.log.debug('Killing find %s' % self.ps.pid)
+#                os.kill(self.ps.pid, signal.SIGKILL)
+#                break
+#
+#            i = i.strip('\n')
+#            self.log.debug(i)
+#
+#            if exclude(i): continue
+#            self.mgr.path_notify(i)
+#
+#        self.mgr.state_detach(self)
+#
+#
+#    def state_update(self, state):
+#        if state in [CANCELED, FINISH]:
+#            self.log.debug('Killing find %s at update()' % self.ps.pid)
+#            try:
+#                os.kill(self.ps.pid, signal.SIGKILL)
+#            except OSError, e:
+#                rprint('\n %s %s \n' % (e, self.ps.pid))
 
 
 class DiskWorker(Worker):
@@ -574,8 +655,7 @@ class DiskWorker(Worker):
                 if os.path.islink(path): continue
 
                 if Config().match_func(path):
-                    self.mgr.path_notify(path)
-                    self.count += 1
+                    self.notify(path)
 
                 elif Config().pattern > 1 and match_single(path):
                     self.mgr.add_work(path)
@@ -589,7 +669,7 @@ class ParentWorker(Worker):
         lis =  os.getcwd().split(os.sep)
         for i in range(len(lis)-1, 0, -1):
             path = string.join(lis[:i] + [''], os.sep)
-            self.mgr.path_notify(path)
+            self.notify(path)
 
 
 class Manager(object):
@@ -685,8 +765,9 @@ class Manager(object):
                 self.pending = self.pending[1:]
                 self.pending_lock.release()
 
-                self.create_worker(DiskWorker, path)
-                #manager.createWorker(FindWorker, path)
+                #self.create_worker(DiskWorker, path)
+                #self.create_worker(FindWorker, path)
+                self.create_worker(TreeWorker, path)
 
             if self.stop.isSet() or \
                    not (self.__any_worker_alive() or self.pending):
@@ -710,8 +791,9 @@ class Manager(object):
         self.state_notify(WAITING)
 
         for w in self.workers:
-            logging.debug("worker %s (%s) found %s" % \
-                          (id(w), w.__class__.__name__.ljust(13), w.count))
+            logging.debug("worker %s (%s %s) found %s" % \
+                          (id(w), w.__class__.__name__.ljust(13), w.root, w.count))
+
 
     def run(self):
         self.main_job()
@@ -1137,14 +1219,14 @@ if __name__ == '__main__':
 
     argv = sys.argv[:]
     if os.path.exists(GO2CONFIG):
-        argv[1:1]  = file(GO2CONFIG).read().split()
+        argv[1:1] = file(GO2CONFIG).read().split()
 
     if len(argv) > 1 and '--cd' == argv[1]:
         if len(argv) == 2:
             saveTarget(USERDIR)
             sys.exit(0)
 
-        params = ' '.join(argv[2:])
+        params = str.join(' ', argv[2:])
         try:
             target = os.path.abspath(params)
         except OSError, e:
@@ -1153,15 +1235,25 @@ if __name__ == '__main__':
             sys.exit(0)
 
         if not os.path.exists(target):
-            saveTarget(params)
-            sys.exit(1)
+            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (params, ConsoleUI.high('go2')),
+            try:
+                ans = raw_input()
+            except KeyboardInterrupt:
+                print
+                sys.exit(1)
 
-        hist = PathFile(GO2HISTORY, 1000)
-        hist.insert(target)
-        hist.commit()
-        saveTarget(target)
-        sys.exit(0)
+            if ans.lower().startswith('y'):
+                argv.remove('--cd')
+            else:
+#               saveTarget(params)
+                sys.exit(1)
 
+        else:
+            hist = PathFile(GO2HISTORY, 1000)
+            hist.insert(target)
+            hist.commit()
+            saveTarget(target)
+            sys.exit(0)
 
     console = logging.StreamHandler()
     formatter = logging.Formatter('\r%(levelname)-8s: %(message)s')
@@ -1169,14 +1261,15 @@ if __name__ == '__main__':
     logging.getLogger().addHandler(console)
 
     if '--log' in argv or '--debug' in argv:
+        print "go2: log enabled"
         logging.basicConfig(level=logging.DEBUG,
             format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
             filename=GO2LOG)
 
     if '--debug' in argv:
-        console.setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.DEBUG)
     else:
-        console.setLevel(logging.ERROR)
+        logging.getLogger().setLevel(logging.ERROR)
 
 
     logging.info("\n\n---------- [go2 '%s']" % sys.argv[1:])

@@ -214,27 +214,20 @@ alias cd='go2 --cd'
   </refsect1>
   <refsect1>
     <title>SEE ALSO</title>
-
-<!--
-    <para>
-      The programs are documented fully by <citetitle>The Rise and Fall
-        of a Fooish Bar</citetitle> available via the
-      <application>Info</application> system.
-    </para>
--->
     <para>
       This program is fully documented in
-      http://arco.inf-cr.uclm.es/~david.villa/go2.html
+      http://arco.esi.uclm.es/~david.villa/go2.html
     </para>
   </refsect1>
   <refsect1>
     <title>AUTHOR</title>
 
-    <para>This manual page was written by &dhusername; &dhemail; for
-      the &debian; system (but may be used by others).  Permission is
-      granted to copy, distribute and/or modify this document under
+    <para>
+      This manual page was written by &dhusername; &lt;&dhemail;&gt;
+      for the &debian; system (but may be used by others).  Permission
+      is granted to copy, distribute and/or modify this document under
       the terms of the &gnu; General Public License, Version 2 any
-	  later version published by the Free Software Foundation.
+      later version published by the Free Software Foundation.
     </para>
     <para>
       On Debian systems, the complete text of the GNU General Public

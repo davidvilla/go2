@@ -1,3 +1,9 @@
+go2 (0.20100209-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- David Villa Alises <David.Villa@uclm.es>  Tue, 09 Feb 2010 16:38:28 +0100
+
 go2 (0.20090829-1) unstable; urgency=low
 
   * New upstream release.
