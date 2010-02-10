@@ -486,6 +486,7 @@ class CmdWorker(Worker):
 
         self.mgr.state_detach(self)
 
+        self.ps.wait()
 
     def state_update(self, state):
         if state in [CANCELED, FINISH]:
@@ -757,7 +758,7 @@ class Manager(object):
         while 1:
             if self.pending:
                 logging.debug('PENDIND: %s' % self.pending)
-                if threading.activeCount() < 20:
+                if threading.activeCount() < 5:
                     #path = self.pending[0]
                     #self.pending_lock.acquire()
                     #self.pending = self.pending[1:]
