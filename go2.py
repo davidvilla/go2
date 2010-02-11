@@ -1366,10 +1366,7 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
                 print
                 sys.exit(1)
 
-            if ans.lower().startswith('y'):
-                argv.remove('--cd')
-            else:
-#               saveTarget(params)
+            if not ans.lower().startswith('y'):
                 sys.exit(1)
 
         else:
