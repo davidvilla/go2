@@ -1,4 +1,10 @@
-go2 (0.20100209-1) unstable; urgency=low
+go2 (0.20100211-1) UNRELEASED; urgency=low
+
+  * Upstream bugfixes.
+
+ -- David Villa Alises <David.Villa@uclm.es>  Thu, 11 Feb 2010 21:12:52 +0100
+
+go2 (0.20100209-1) UNRELEASED; urgency=low
 
   * New upstream release.
   * debian/control suggests python-gtk2 (Closes: #545249)
