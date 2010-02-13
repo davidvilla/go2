@@ -1359,7 +1359,8 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             sys.exit(0)
 
         if not os.path.exists(target):
-            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (params, ConsoleUI.high('go2')),
+            target = os.path.basename(target)
+            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
             try:
                 ans = raw_input()
             except KeyboardInterrupt:
