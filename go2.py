@@ -474,8 +474,9 @@ class CmdWorker(Worker):
 
         for i in self.ps.stdout:
             if self.mgr.stop.isSet():
-                self.log.debug('Killing find %s' % self.ps.pid)
-                os.kill(self.ps.pid, signal.SIGKILL)
+                if self.ps.pid:
+                    self.log.debug('Killing find %s' % self.ps.pid)
+                    os.kill(self.ps.pid, signal.SIGKILL)
                 break
 
             i = os.path.abspath(i.strip('\n'))
@@ -1350,6 +1351,7 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
+        print config.pattern
         params = ' '.join(args)
         try:
             target = os.path.abspath(params)
@@ -1358,25 +1360,26 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
-        if not os.path.exists(target):
-            target = os.path.basename(target)
-            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
-            try:
-                ans = raw_input()
-            except KeyboardInterrupt:
-                print
-                sys.exit(1)
-
-            if not ans.lower().startswith('y'):
-                sys.exit(1)
-
-        else:
+        if os.path.exists(target):
             hist = PathFile(GO2HISTORY)
             hist.insert(target)
             hist.commit()
             saveTarget(target)
             sys.exit(0)
 
+
+        target = os.path.basename(target)
+        print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
+        try:
+            ans = raw_input()
+        except KeyboardInterrupt:
+            print
+            sys.exit(1)
+
+        if not ans.lower().startswith('y'):
+            sys.exit(1)
+
+        config.pattern = [target]
 
     if config.basedir:
         if os.path.isdir(a): dirname = a
