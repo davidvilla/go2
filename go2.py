@@ -1360,7 +1360,19 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
-        if os.path.exists(target):
+        if config.pattern[0] != '-' and not os.path.exists(target):
+            target = os.path.basename(target)
+            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
+            try:
+                ans = raw_input()
+            except KeyboardInterrupt:
+                print
+                sys.exit(1)
+
+            if not ans.lower().startswith('y'):
+                sys.exit(1)
+
+        else:
             hist = PathFile(GO2HISTORY)
             hist.insert(target)
             hist.commit()
