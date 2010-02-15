@@ -1351,7 +1351,6 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
-        print config.pattern
         params = ' '.join(args)
         try:
             target = os.path.abspath(params)
@@ -1360,25 +1359,16 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
-        if config.pattern[0] != '-' and not os.path.exists(target):
-            target = os.path.basename(target)
-            print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
-            try:
-                ans = raw_input()
-            except KeyboardInterrupt:
-                print
-                sys.exit(1)
 
-            if not ans.lower().startswith('y'):
-                sys.exit(1)
+        if config.pattern[0] == '-':
+            target = '-'
 
-        else:
+        if os.path.exists(target) or target == '-':
             hist = PathFile(GO2HISTORY)
             hist.insert(target)
             hist.commit()
             saveTarget(target)
             sys.exit(0)
-
 
         target = os.path.basename(target)
         print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),

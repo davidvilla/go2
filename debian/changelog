@@ -1,4 +1,4 @@
-go2 (0.20100211-1) UNRELEASED; urgency=low
+go2 (0.20100215-1) UNRELEASED; urgency=low
 
   * Upstream bugfixes.
 
@@ -13,7 +13,6 @@ go2 (0.20100209-1) UNRELEASED; urgency=low
     * manpage now includes all options.
     * manpage has a new 'important' section about sourcing /usr/lib/go2/go2.sh
     * --help now includes all options.
-
 
  -- David Villa Alises <David.Villa@uclm.es>  Tue, 09 Feb 2010 16:38:28 +0100
 
