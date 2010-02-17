@@ -2,6 +2,12 @@ go2 (0.20100217-1) UNRELEASED; urgency=low
 
   * Upstream bugfixes.
 
+ -- David Villa Alises <David.Villa@uclm.es>  Wed, 17 Feb 2010 01:52:14 +0100
+
+go2 (0.20100216-1) UNRELEASED; urgency=low
+
+  * Upstream bugfixes.
+
  -- David Villa Alises <David.Villa@uclm.es>  Thu, 11 Feb 2010 21:12:52 +0100
 
 go2 (0.20100209-1) UNRELEASED; urgency=low
