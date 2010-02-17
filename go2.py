@@ -846,10 +846,10 @@ class Manager(object):
 
 
     def __any_worker_alive(self):
-        #Change to "any()" when Debian uses python2.5
-        for i in self.workers:
-            if i.isAlive(): return True
-        return False
+        return any((w.isAlive() for w in self.workers))
+        #for i in self.workers:
+        #    if i.isAlive(): return True
+        #return False
 
 
     def set_election(self, election):
@@ -1359,11 +1359,11 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             saveTarget(USERDIR)
             sys.exit(0)
 
+        if params == '-':
+            saveTarget('-')
+            sys.exit(0)
 
-        if config.pattern[0] == '-':
-            target = '-'
-
-        if os.path.exists(target) or target == '-':
+        if os.path.exists(target):
             hist = PathFile(GO2HISTORY)
             hist.insert(target)
             hist.commit()
