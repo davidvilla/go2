@@ -1443,4 +1443,3 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
 
     config.update()
     console_main()
-
