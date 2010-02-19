@@ -1,0 +1,10 @@
+Exception in thread HistoryWorker:
+Traceback (most recent call last):
+File "/usr/lib/python2.5/threading.py", line 486, in __bootstrap_inner
+  self.run()
+File "/usr/lib/go2/go2.py", line 394, in run
+  if config.match_func(i):
+File "/usr/lib/go2/go2.py", line 114, in match_multi
+  match = items[-1].startswith(pattern[-1])
+IndexError: list index out of range
+
