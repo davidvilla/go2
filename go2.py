@@ -456,6 +456,7 @@ class CmdWorker(Worker):
         self.log = logging.getLogger(self.name)
         self.log.debug("[%s] New %s for '%s'" % \
                            (id(self), self.name, self.root))
+        self.ps = None
 
     def run(self, cmd):
         self.ps = subprocess.Popen(cmd, shell=True,
@@ -490,12 +491,15 @@ class CmdWorker(Worker):
         self.ps.wait()
 
     def state_update(self, state):
-        if state in [CANCELED, FINISH]:
-            self.log.debug('Killing find %s at update()' % self.ps.pid)
-            try:
-                os.kill(self.ps.pid, signal.SIGKILL)
-            except OSError, e:
-                rprint('\n %s %s \n' % (e, self.ps.pid))
+        if self.ps is None: return
+        if state not in [CANCELED, FINISH]: return
+
+        self.log.debug('Killing %s %s at update()' % \
+                           (self.name, self.ps.pid))
+        try:
+            os.kill(self.ps.pid, signal.SIGKILL)
+        except OSError, e:
+            rprint('\n %s %s \n' % (e, self.ps.pid))
 
 
 class FindWorker(CmdWorker):
