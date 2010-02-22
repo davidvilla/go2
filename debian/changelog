@@ -1,3 +1,9 @@
+go2 (0.20100222-3) UNRELEASED; urgency=low
+
+  * Canditate to solve #570249
+
+ -- David Villa Alises <David.Villa@uclm.es>  Mon, 22 Feb 2010 14:09:45 +0100
+
 go2 (0.20100222-2) UNRELEASED; urgency=low
 
   * More upstream bugfixes

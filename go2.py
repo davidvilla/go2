@@ -1284,7 +1284,7 @@ def console_main():
 
 if __name__ == '__main__':
     try:
-        os.getcwd()
+        os.chdir(os.environ['PWD'])
     except OSError,e:
         logging.error("Current directory does not exists!")
         saveTarget(USERDIR)
