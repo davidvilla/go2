@@ -1,3 +1,9 @@
+go2 (0.20100326-1) UNRELEASED; urgency=low
+
+  * New upstream release. --cd makes directories
+
+ -- David Villa Alises <David.Villa@uclm.es>  Fri, 26 Mar 2010 02:45:54 +0100
+
 go2 (0.20100222-3) UNRELEASED; urgency=low
 
   * Canditate to solve #570249
