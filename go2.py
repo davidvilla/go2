@@ -21,7 +21,8 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 
-import os, sys, tty, termios, select, re
+import os, sys
+import tty, termios, select, re
 import thread, threading
 import subprocess
 import signal
@@ -142,6 +143,11 @@ def saveTarget(dirname):
     fd = open(GO2TMP, 'w')
     fd.write(dirname)
     fd.close()
+
+def save_in_history(dirname):
+    hist = PathFile(GO2HISTORY)
+    hist.insert(dirname)
+    hist.commit()
 
 
 class PathAsserts:
@@ -1368,24 +1374,40 @@ Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
             sys.exit(0)
 
         if os.path.exists(target):
-            hist = PathFile(GO2HISTORY)
-            hist.insert(target)
-            hist.commit()
+            save_in_history(target)
             saveTarget(target)
             sys.exit(0)
 
-        target = os.path.basename(target)
-        print "cd: '%s' does not exist. Do you want %s it? (y/N):" % (target, ConsoleUI.high('go2')),
+        basetarget = os.path.basename(target)
+        print "cd: '%s' does not exist. Cancel, Search or Make? (C,s,m):" % basetarget,
+
         try:
             ans = raw_input()
         except KeyboardInterrupt:
             print
             sys.exit(1)
 
-        if not ans.lower().startswith('y'):
+        if len(ans) != 1:
             sys.exit(1)
 
-        config.pattern = [target]
+        ans = ans.lower()
+        if ans not in 'sm':
+            sys.exit(1)
+
+        if ans == 'm':
+            try:
+                os.mkdir(target)
+            except OSError, e:
+                print e
+                sys.exit(1)
+
+            print("go2: Making and changing to directory '%s'." % target)
+            save_in_history(target)
+            saveTarget(target)
+            sys.exit(0)
+
+
+        config.pattern = [basetarget]
 
     if config.basedir:
         if os.path.isdir(a): dirname = a
