@@ -1,0 +1,5 @@
+# -*- mode:python; coding:utf-8 -*-
+
+t = Task('$basedir/go2.py -lH', save_stdout=True,
+         desc="just list history")
+t.post += FileEquals('/home/david/.go2/history')
