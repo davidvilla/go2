@@ -3,7 +3,8 @@
 DEB_PYTHON_SYSTEM=pycentral
 DBK2MAN_XSL=/usr/share/xml/docbook/stylesheet/nwalsh/manpages/docbook.xsl
 #DBK2MAN_XSL=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/manpages/docbook.xsl
-VERSION=$(shell python -c "from go2 import VERSION; print VERSION")
+#VERSION=$(shell python -c "from go2 import VERSION; print VERSION")
+VERSION=$(shell python -c "import go2; print go2.VERSION")
 
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/python-distutils.mk

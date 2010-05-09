@@ -22,6 +22,8 @@
 
 
 import os, sys
+sys.path.remove(os.getcwd())
+
 import tty, termios, select, re
 import thread, threading
 import subprocess
