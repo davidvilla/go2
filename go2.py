@@ -286,7 +286,7 @@ class ConsoleUI(threading.Thread):
 
         path = highlight(config.pattern,
                          path, self.HIGH, self.LOW).\
-                         replace(USERDIR, '~')
+                         replace(USERDIR, '~', 1)
 
         rprint("%c: %s%s\n" % (chr(self.__index), path.ljust(16), msg))
         rprint('\rSearching...')
@@ -1169,7 +1169,7 @@ class GtkFrontend:
 
     def offline_path_update(self, path):
         tagged_path = highlight(config.pattern, path, '<b>', '</b>').\
-                      replace(USERDIR, '~')
+                      replace(USERDIR, '~', 1)
 
         self.store.append([tagged_path, self.__n])
 
