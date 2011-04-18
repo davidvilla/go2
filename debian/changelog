@@ -1,3 +1,20 @@
+go2 (0.20101119-1) unstable; urgency=low
+
+  * New upstream release.
+
+  * Bug fix: "deprecation of dh_pycentral, please use dh_python2", thanks
+    to Matthias Klose (Closes: #616833).
+  * Bug fix: "Error when a directory does not exist (but it exists)",
+    thanks to Cleto Martin Angelina (Closes: #570249).
+  * Bug fix: "ImportError: No module named glade", thanks to Justin B Rye
+    (Closes: #545247).
+  * Bug fix: "documentation needed", thanks to Justin B Rye (Closes:
+    #545249).
+  * Bug fix: "source .bashrc makes go2 freezed", thanks to Cleto Martin
+    Angelina (Closes: #588270).
+
+ -- Cleto Martin Angelina <cleto.martin@gmail.com>  Mon, 18 Apr 2011 20:40:34 +0200
+
 go2 (0.20100326-1) UNRELEASED; urgency=low
 
   * New upstream release. --cd makes directories

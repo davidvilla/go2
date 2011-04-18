@@ -2,11 +2,10 @@ Source: go2
 Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
-Uploaders: Francisco Moya <paco@debian.org>
-Build-Depends: cdbs, debhelper (>= 5), python, python-central (>= 0.5), docbook-to-man, docbook-xsl, xsltproc
-Standards-Version: 3.8.4
+Uploaders: Francisco Moya <paco@debian.org>, Cleto Martin Angelina <cleto.martin@gmail.com>
+Build-Depends: debhelper (>= 7.0.50~), python (>= 2.6.6-3~), docbook-to-man, docbook-xsl, xsltproc
+Standards-Version: 3.9.1
 Homepage: http://savannah.nongnu.org/projects/go2/
-XS-Python-Version: all
 
 Package: go2
 Architecture: all
