@@ -1,7 +1,6 @@
-go2 (0.20101119-1) unstable; urgency=low
+go2 (0.20110418-1) unstable; urgency=low
 
   * New upstream release.
-
   * Bug fix: "deprecation of dh_pycentral, please use dh_python2", thanks
     to Matthias Klose (Closes: #616833).
   * Bug fix: "Error when a directory does not exist (but it exists)",

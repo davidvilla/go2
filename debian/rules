@@ -14,7 +14,7 @@ override_dh_auto_clean:
 	dh_auto_clean
 	-$(RM) go2.1
 
-build-orig-source:
+build-orig:
 	mkdir -p go2-$(VERSION)
 	tar --exclude=debian --exclude=\*~ --exclude=.svn --exclude=\*.pyc \
 		--exclude=go2-$(VERSION) -cf - . \

@@ -72,14 +72,23 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
       <author>
        <firstname>&dhfirstname;</firstname>
         <surname>&dhsurname;</surname>
-        <contrib>Wrote this manpage for the Debian system.</contrib>
+        <contrib>Wrote initially go2 and this manpage for the Debian
+        system.</contrib>
         <address>
           <email>&dhemail;</email>
         </address>
       </author>
+      <author>
+	<firstname>Cleto</firstname>
+	<surname>Martin</surname>
+	<contrib>Updated this manpange.</contrib>
+	<address>
+	  <email>cleto.martin@gmail.com</email>
+	</address>
+      </author>
     </authorgroup>
     <copyright>
-      <year>2009</year>
+      <year>2011</year>
       <holder>&dhusername;</holder>
     </copyright>
     <legalnotice>
@@ -180,6 +189,41 @@ alias cd='go2 --cd'
            control the term elements. -->
 
       <varlistentry>
+	<term><option>--cd=<replaceable>PATH</replaceable></option></term>
+        <listitem>
+          <para>Just change working directory</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--debug</option></term>
+        <listitem>
+          <para>Print debug output</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--log</option></term>
+        <listitem>
+          <para>More verbose output</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>--gui</option></term>
+        <listitem>
+          <para>Launch graphical user interface</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term><option>-H</option></term>
+        <listitem>
+          <para>Select path from history</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><option>-i</option></term>
         <listitem>
           <para>Case insensitive.</para>
@@ -198,18 +242,29 @@ alias cd='go2 --cd'
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term><option>-H</option></term>
+        <term><option>-l</option></term>
         <listitem>
-          <para>List the history.</para>
+          <para>List only, print matches and exists.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term><option>-l</option></term>
+        <term><option>--setup</option></term>
         <listitem>
-          <para>list only, print matches and exists.</para>
+          <para>Install go2 in your .bashrc.</para>
         </listitem>
       </varlistentry>
-
+      <varlistentry>
+	<term><option>--cmd=<replaceable>CMD</replaceable></option></term>
+        <listitem>
+          <para>Execute 'CMD' in selected path as argument instead of 'cd'</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+	<term><option>--base-dir=<replaceable>BASEDIR</replaceable></option></term>
+        <listitem>
+          <para>Search from BASEDIR directory</para>
+        </listitem>
+      </varlistentry>
     </variablelist>
   </refsect1>
   <refsect1>

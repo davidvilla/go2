@@ -11,7 +11,7 @@ Package: go2
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, tree
 Suggests: python-psyco, locate, python-gtk2
-XB-Python-Version: ${python:Versions}
+X-Python-Version: all
 Description:Fast directory finder
  This package provides a mechanism for quickly changing directory on
  the commandline, in the style of the old Norton Change Directory for
