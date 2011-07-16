@@ -2,9 +2,10 @@ Source: go2
 Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
-Uploaders: Francisco Moya <paco@debian.org>, Cleto Martin Angelina <cleto.martin@gmail.com>
-Build-Depends: debhelper (>= 7.0.50~), python (>= 2.6.6-3~), docbook-to-man, docbook-xsl, xsltproc
-Standards-Version: 3.9.1
+Uploaders: Francisco Moya <paco@debian.org>
+Build-Depends: debhelper (>= 7.0.50~), python (>= 2.6.6-3~), docbook-to-man,
+ docbook-xsl, xsltproc
+Standards-Version: 3.9.2
 Homepage: http://savannah.nongnu.org/projects/go2/
 
 Package: go2
@@ -24,6 +25,5 @@ Description:Fast directory finder
   * configuration file for default options;
   * multithreaded execution.
  .
- To activate go2, users need to source the appropriate function in
- their ~/.bashrc - see man page for details.
-
+ To activate go2, users need to source the appropriate function in their
+ ~/.bashrc, but it is done automatically the first time you invoke it.

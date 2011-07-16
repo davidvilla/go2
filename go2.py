@@ -22,7 +22,11 @@
 
 
 import os, sys
-if os.getcwd() in sys.path: sys.path.remove(os.getcwd())
+
+try:
+    sys.path.remove(os.getcwd())
+except (OSError, ValueError):
+    pass
 
 import tty, termios, select, re
 import thread, threading
