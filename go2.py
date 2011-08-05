@@ -62,7 +62,7 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 
-VERSION = '1.0'
+VERSION = '1.20110805'
 
 
 def go2setup():
@@ -530,6 +530,7 @@ for details.'''.format(VERSION),
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 
     retval = parser.parse_args(args)
+    retval.parser = parser
     retval.match_func = match_single if len(retval.pattern) == 1 else match_multi
     retval.apply_case = str.lower if retval.ignorecase else str
 
@@ -553,7 +554,8 @@ if __name__ == '__main__':
         sys.exit(chdir_decorator())
 
     if not config.pattern:
-        print("go2.py: error: too few arguments")
+        print("go2.py: error: too few arguments\n")
+        config.parser.print_help()
         sys.exit(1)
 
     Go2().main()

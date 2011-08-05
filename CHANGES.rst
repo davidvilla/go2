@@ -1,4 +1,9 @@
 
+------------
+
+* New multiprocess version (without GUI)
+
+
 Release 0.20110716
 ------------------
 

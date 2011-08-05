@@ -1,0 +1,9 @@
+#!/usr/bin/atheist
+# -*- mode:python; coding:utf-8 -*-
+
+Test('$basedir/go2.py',
+     expected=1,
+     post=StdOutContains(
+        ['error: too few arguments',
+         'go2 is a fast directory finder.'])
+     )

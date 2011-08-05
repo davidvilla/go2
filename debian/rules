@@ -1,23 +1,30 @@
 #!/usr/bin/make -f
 
-DBK2MAN_XSL=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/manpages/docbook.xsl
-VERSION=$(shell python -c "import go2; print go2.VERSION")
+VERSION=$(shell head -n 1 debian/changelog | cut -f2 -d " " | tr -d "()" | cut -f1 -d "-")
+APP=go2
+ORIG_REPO=hg clone http://hg.savannah.nongnu.org/hgweb/go2
+ORIG_DIR=$(APP)-$(VERSION)
+EXCLUDE=--exclude=debian --exclude=\*~ --exclude=.hg --exclude=.svn --exclude=\*.pyc
 
 %:
-	dh --with=python2 $@
+	dh $@ --with=python2
 
 override_dh_auto_build:
 	dh_auto_build
-	xsltproc --nonet  --param man.charmap.use.subset "0" $(DBK2MAN_XSL) debian/go2.xml
+	rst2man go2.rst > go2.1
 
 override_dh_auto_clean:
 	dh_auto_clean
 	-$(RM) go2.1
 
+get-orig:
+	$(ORIG_REPO) $(ORIG_DIR)
+	tar $(EXCLUDE) -czf ../tarballs/$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
+	$(RM) -r $(ORIG_DIR)
+
+# FOR UPSTREAM USE ONLY!
 build-orig:
-	mkdir -p go2-$(VERSION)
-	tar --exclude=debian --exclude=\*~ --exclude=.svn --exclude=\*.pyc \
-		--exclude=go2-$(VERSION) -cf - . \
-		| ( cd go2-$(VERSION) && tar xf - )
-	tar -czf ../tarballs/go2_$(VERSION).orig.tar.gz go2-$(VERSION)
-	$(RM) -r go2-$(VERSION)
+	mkdir -p $(ORIG_DIR)
+	tar $(EXCLUDE) --exclude=$(ORIG_DIR) -cf - . | ( cd $(ORIG_DIR) && tar xf - )
+	tar -czf ../tarballs/$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
+	$(RM) -r $(ORIG_DIR)
