@@ -9,8 +9,7 @@ Homepage: http://savannah.nongnu.org/projects/go2/
 
 Package: go2
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, tree
-Suggests: python-psyco, locate, python-gtk2
+Depends: ${misc:Depends}, ${python:Depends}, tree, python-fs
 X-Python-Version: all
 Description:Fast directory finder
  This package provides a mechanism for quickly changing directory on
