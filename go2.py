@@ -138,7 +138,6 @@ def match_multi(path):
 
 
 def save_target(path):
-#    print '-->', path
     with config.fs.open(GO2TMP, 'w') as fd:
         fd.write(path)
 
@@ -172,10 +171,15 @@ class PathStore:
             del fd
 
     def __iter__(self):
-        items = self.data.items()
-        items.sort(key=itemgetter(1), reverse=True)
-        for path in items:
-            yield path[0]
+        def _cmp(p1, p2):
+            retval = -cmp(p1[1], p2[1])
+            if retval == 0:
+                return cmp(p1[0], p2[0])
+
+            return retval
+
+        for path, visits in sorted(self.data.items(), cmp=_cmp):
+            yield path
 
     def insert(self, seq):
 #        self.log.debug("   Saving to file: %s (%s)" % (item,
@@ -188,11 +192,8 @@ class PathStore:
             self.data[path] = visits + 1
 
     def save(self):
-        items = self.data.items()
-        items.sort(key=itemgetter(1))
-
         with config.fs.open(self.path, 'w') as fd:
-            for path, visits in items[:self.size]:
+            for path, visits in self.data.items()[:self.size]:
                 fd.write("{0}:{1}\n".format(visits, path))
 
     def insert_and_save(self, item):
@@ -230,7 +231,6 @@ class CommandTask:
         self.communicate()
 
     def signal_handler(self, signum, *args):
-#        print self.ps, signum
         os.killpg(self.ps.pid, signum)
         self.ps.wait()
         sys.exit(1)
@@ -413,16 +413,12 @@ class ProcessPool(object):
 
         for w in self.workers:
             if w.is_alive():
-#                print 'terminating', w
                 w.terminate()
                 w.join()
-
-#        print 'all terminated'
 
     @staticmethod
     def worker(tasks, output):
         for func, args in iter(tasks.get, 'STOP'):
-            # rprint("\n%s %s" % (func.__name__, args))
             func(output, *args)
             tasks.task_done()
 
@@ -447,6 +443,7 @@ class Go2:
 
         except CancelException:
             print("Canceled by user")
+
         except NotMatchException:
             print("Pattern does not match\r")
 
@@ -469,8 +466,9 @@ class Go2:
 
         self.pool.add_task(file_task, self.cache)
 
-        paths = [os.getcwd(), USERDIR]
-#        paths.extend(self.history_not_overlapped())
+        paths = []
+        paths.extend([os.getcwd(), USERDIR])
+#2        paths.extend(self.history_not_overlapped())
 
         if config.from_root:
             paths.append('/')
