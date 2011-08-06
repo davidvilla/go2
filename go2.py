@@ -39,7 +39,6 @@ import termios
 import time
 import signal
 import re
-from operator import itemgetter
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
@@ -112,22 +111,6 @@ def highlight(pattern, path, before=HIGH, after=LOW):
     return retval
 
 
-#def highlight_pattern(pattern, path):
-#    items = path.split(os.sep)
-#
-#    p = len(pattern) - 1
-#    for i in range(len(items) - 1, -1, -1):
-#        if p < 0:
-#            break
-#
-#        if config.apply_case(items[i]).startswith(config.apply_case(pattern[p])):
-#            orig = items[i][:len(pattern[p])]
-#            items[i] = items[i].replace(orig, high(orig), 1)
-#            p -= 1
-#
-#    return os.sep.join(items)
-
-
 class MatchLevel:
     NO_MATCH = -1
     START = 0
@@ -177,32 +160,6 @@ def match(path):
         return MatchLevel.CONTAIN_IGNORECASE
 
     return MatchLevel.NO_MATCH
-
-
-# def match_single(path):
-#     path = config.apply_case(path.strip('\n'))
-#     return os.path.basename(path).startswith(config.pattern[0])
-#
-#
-# def match_multi(path):
-#     path = config.apply_case(path.strip())
-#
-#     pattern = config.pattern
-#     items = path.split(os.sep)[1:]
-#
-#     match = items[-1].startswith(pattern[-1])
-#     if not match:
-#         return False
-#
-#     p = len(pattern) - 2
-#     for i in items[-2::-1]:
-#         if p < 0:
-#             return True
-#
-#         if i.startswith(pattern[p]):
-#             p -= 1
-#
-#     return False
 
 
 def save_target(path):
