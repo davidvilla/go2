@@ -1,0 +1,87 @@
+#!/usr/bin/atheist
+# -*- mode:python; coding:utf-8 -*-
+
+import sys
+import os
+
+import unittest2 as unittest
+from fs.memoryfs import MemoryFS
+from pyDoubles.framework import *
+
+sys.path.append('$basedir')
+
+import go2
+
+
+def create_basic_dirs(fs):
+    home = go2.USERDIR
+    fs.makedir(home, recursive=True)
+
+
+class Test_chdir_decorator(unittest.TestCase):
+    def setUp(self):
+        self.fs = MemoryFS()
+        create_basic_dirs(self.fs)
+
+        config = go2.get_config([])
+        config.fs = self.fs
+        go2.config = config
+
+        os.chdir(go2.USERDIR)
+
+    def tearDown(self):
+        pass
+
+    def mkdir(self, name):
+        path = os.path.join(go2.USERDIR, name)
+        self.fs.makedir(path, name)
+        return path
+
+    def test_no_pattern(self):
+        spy = empty_spy()
+        go2.save_target = spy.save_target
+
+        go2.chdir_decorator()
+
+        assert_that_was_called(spy.save_target).with_args(go2.USERDIR)
+
+    def test_no_hyphen(self):
+        go2.config.pattern = ['-']
+
+        spy = empty_spy()
+        go2.save_target = spy.save_target
+
+        go2.chdir_decorator()
+
+        assert_that_was_called(spy.save_target).with_args('-')
+
+    def mock_dir_history_save(self, relpath):
+        path = self.mkdir(relpath)
+
+        mock = empty_mock()
+        go2.save_in_history = mock.save_in_history
+        go2.save_target = mock.save_target
+
+        expect_call(mock.save_in_history).with_args(path)
+        expect_call(mock.save_target).with_args(path)
+
+        return mock
+
+    def test_existing_dir_1_word(self):
+        go2.config.pattern = ['foo']
+        mock = self.mock_dir_history_save('foo')
+
+        go2.chdir_decorator()
+
+        mock.assert_that_is_satisfied()
+
+    def test_existing_dir_2_words(self):
+        go2.config.pattern = ['foo bar']
+        mock = self.mock_dir_history_save('foo bar')
+
+        go2.chdir_decorator()
+
+        mock.assert_that_is_satisfied()
+
+
+UnitTestCase()

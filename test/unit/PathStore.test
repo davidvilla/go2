@@ -1,0 +1,104 @@
+#!/usr/bin/atheist
+# -*- mode:python; coding:utf-8 -*-
+
+import sys
+sys.path.append('$basedir')
+
+import os
+import unittest2 as unittest
+import time
+
+import fs
+from fs.memoryfs import MemoryFS
+
+from pyDoubles.framework import *
+
+import go2
+from go2 import PathStore, file_task
+
+HOME = '/home/user'
+
+class StubFS(object):
+    def setUp(self):
+        self.fs = MemoryFS()
+        self.mkdir('lab')
+
+        config = go2.get_config([])
+        config.fs = self.fs
+        go2.config = config
+
+    def mkdir(self, relpath):
+        self.fs.makedir(fs.join(HOME, relpath), recursive=True)
+
+    def PathStore_with_content(self, path, more=''):
+        self.fs.createfile(path, '''\
+1: /home/user/lab
+2: /home/user/lab/media
+''' + more)
+        return PathStore(path)
+
+
+class Test_PathStore(unittest.TestCase, StubFS):
+    def setUp(self):
+        StubFS.setUp(self)
+
+    def test_load_ok(self):
+        sut = self.PathStore_with_content('paths')
+        self.assertEquals(set(sut.data.keys()),
+                          set(['/home/user/lab',
+                               '/home/user/lab/media']))
+
+    def assert_visits(self, store_path, path, visits):
+        self.assertIn("{0}:{1}\n".format(visits, path),
+                      self.fs.getcontents(store_path))
+
+    def store_create_and_insert(self, store_path, path, size=None, visits=None):
+        sut = self.PathStore_with_content(store_path)
+        sut.insert_and_save(path)
+        if size:
+            self.assertEquals(len(sut.data), size)
+        if visits:
+            self.assert_visits(store_path, path, visits)
+        return sut
+
+    def test_insert_new(self):
+        self.store_create_and_insert('paths', '/home/user/new', 3, 1)
+
+    def test_insert_old_most_visited(self):
+        path = '/home/user/lab/media'
+        sut = self.store_create_and_insert('paths', path, 2, 3)
+        self.assertEquals(list(sut)[0], path)
+
+    def test_insert_old_less_visited(self):
+        path = '/home/user/lab'
+        store = 'paths'
+        sut = self.store_create_and_insert(store, path, 2, 2)
+        sut.insert_and_save(path)
+        self.assert_visits(store, path, 3)
+        self.assertEquals(list(sut)[0], path)
+
+
+class Test_file_task(unittest.TestCase, StubFS):
+    def setUp(self):
+        StubFS.setUp(self)
+
+    def test_search_existing(self):
+        sut = self.PathStore_with_content('paths')
+        go2.config.pattern = ['la']
+
+        spy = empty_spy()
+        file_task(spy, sut)
+
+        assert_that_was_called(spy.put).with_args('/home/user/lab')
+
+    def test_search_missing(self):
+        "file_task remove checked missing paths"
+        sut = self.PathStore_with_content('paths')
+        go2.config.pattern = ['med']
+
+        spy = empty_spy()
+        file_task(spy.put, sut)
+
+        assert_that_method(spy.put).was_never_called()
+
+UnitTestCase()

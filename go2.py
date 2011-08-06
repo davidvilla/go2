@@ -38,9 +38,13 @@ import select
 import termios
 import time
 import signal
+from operator import itemgetter
+
+from fs.osfs import OSFS
+from fs import ResourceNotFoundError
 
 import logging
-log = logging.getLogger('2go')
+log = logging.getLogger('go2')
 
 import argparse
 
@@ -64,20 +68,22 @@ GO2LOG     = os.path.join(GO2DIR, 'log')
 
 VERSION = '1.20110805'
 
+ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
+CD_MODE_CMD = "alias cd='go2 --cd'"
 
-def go2setup():
-    if os.system('grep go2.sh ~/.bashrc > /dev/null') == 0:
-        print('go2 already configured, skipping.')
-        return 1
 
-    with open(os.path.join(USERDIR, '.bashrc', 'w')) as fd:
-        fd.write('''
-[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh
-alias cd='go2 --cd'
-''')
+def go2setup(mode='r+'):
+    try:
+        if ACTIVATION_CMD in config.fs.getcontents(os.path.join(USERDIR, '.bashrc')):
+            print('go2 already configured, skipping.')
+            return 1
 
-    print('Setting up go2. It will be ready in next shell session.')
-    return 0
+    except ResourceNotFoundError:
+        pass
+
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'w') as fd:
+        fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
+        print('Setting up go2. It will be ready in next shell session.')
 
 
 def rprint(cad=''):
@@ -131,45 +137,45 @@ def match_multi(path):
     return False
 
 
-def loadlines(fname):
-    if not os.path.exists(fname):
-        return []
-
-    try:
-        with open(fname) as fd:
-            return [x for x in [y.strip() for y in fd.readlines()] if x]
-    finally:
-        del fd
-
-
-def savelines(fname, seq):
-    if os.path.exists(fname):
-        os.remove(fname)
-
-    with open(fname, 'w') as fd:
-        fd.write(str.join('\n', seq) + '\n')
-
-
 def save_target(path):
 #    print '-->', path
-    with open(GO2TMP, 'w') as fd:
+    with config.fs.open(GO2TMP, 'w') as fd:
         fd.write(path)
 
 
 class PathStore:
     "Manage a file holding a path set"
+
     def __init__(self, path, size=1000):
         self.path = path
         self.size = size
+        self.load()
 #        self.log = logging.getLogger('PathStore [%s]' % os.path.split(path)[-1])
-        self.data = loadlines(path)
 
-#        if not config.process_hidden:
-#            self.data = filterout_hidden(self.data)
+    def load(self):
+        self.data = {}
+
+        if not config.fs.exists(self.path):
+            return
+
+        try:
+            with config.fs.open(self.path) as fd:
+                # FIXME: try readline
+                for line in fd.read().split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    visits, path = line.split(':', 1)
+                    self.data[path.strip()] = int(visits)
+        finally:
+            del fd
 
     def __iter__(self):
-        for line in self.data[:]:
-            yield line
+        items = self.data.items()
+        items.sort(key=itemgetter(1), reverse=True)
+        for path in items:
+            yield path[0]
 
     def insert(self, seq):
 #        self.log.debug("   Saving to file: %s (%s)" % (item,
@@ -177,14 +183,17 @@ class PathStore:
         if isinstance(seq, str):
             seq = [seq]
 
-        for item in seq:
-            if item in self.data:
-                self.data.remove(item)
-
-            self.data.insert(0, item)
+        for path in seq:
+            visits = self.data.get(path, 0)
+            self.data[path] = visits + 1
 
     def save(self):
-        savelines(self.path, self.data[:self.size])
+        items = self.data.items()
+        items.sort(key=itemgetter(1))
+
+        with config.fs.open(self.path, 'w') as fd:
+            for path, visits in items[:self.size]:
+                fd.write("{0}:{1}\n".format(visits, path))
 
     def insert_and_save(self, item):
         self.insert(item)
@@ -203,8 +212,8 @@ def file_task(output, path_store):
         if not config.match_func(path):
             continue
 
-        if not os.path.exists(path):
-            path_store.data.remove(path)
+        if not config.fs.exists(path):
+            del path_store.data[path]
             continue
 
         output.put(path)
@@ -233,7 +242,7 @@ class CommandTask:
             if not config.match_func(path):
                 continue
 
-            if not os.path.exists(path):
+            if not config.fs.exists(path):
                 continue
 
             self.output.put(path)
@@ -255,6 +264,10 @@ class NotMatchException(Exception):
     pass
 
 
+class NotExistsException(Exception):
+    pass
+
+
 class TTY:
     def __init__(self):
         self.old_settings = tty.tcgetattr(sys.stdin)
@@ -269,8 +282,8 @@ class TTY:
 class UI:
     max_size = 26
 
-    def __init__(self, pspoll):
-        self.pspoll = pspoll
+    def __init__(self, pool):
+        self.pool = pool
         self.index = 0
         self.paths = []
         self.insert_enabled = True
@@ -307,7 +320,7 @@ class UI:
     def refresh(self):
         try:
             while 1:
-                msg = self.pspoll.output_queue.get(timeout=0.1)
+                msg = self.pool.output_queue.get(timeout=0.1)
 
                 if isinstance(msg, str) and self.insert_enabled:
                     self.insert_path(msg)
@@ -319,7 +332,7 @@ class UI:
             self.insert_enabled = False
             rprint('Warning: Too many matches!\n')
 
-        if self.pspoll.has_tasks() and self.insert_enabled:
+        if self.pool.has_tasks() and self.insert_enabled:
             rprint('Searching... ' + str())
             return
 
@@ -362,7 +375,11 @@ class UI:
                     suffix = suffix)))
 
 
-class ProcessPoll(object):
+def sleep(queue, t):
+    time.sleep(t)
+
+
+class ProcessPool(object):
     def __init__(self):
         self.task_queue = mp.JoinableQueue()
         self.output_queue = mp.Queue()
@@ -375,6 +392,15 @@ class ProcessPoll(object):
 
     def add_task(self, func, *args):
         self.task_queue.put((func, args))
+
+    @staticmethod
+    def sleep(queue, t):
+        time.sleep(t)
+
+    def sleep_free_workers(self, time):
+        ntasks = self.task_queue._unfinished_tasks._semlock._get_value()
+        for i in range(len(self.workers) - ntasks):
+            self.add_task(sleep, time)
 
     def has_tasks(self):
         return not self.task_queue._unfinished_tasks._semlock._is_zero()
@@ -403,14 +429,14 @@ class ProcessPoll(object):
 
 class Go2:
     def __init__(self):
-        self.poll = ProcessPoll()
+        self.pool = ProcessPool()
 
     def main(self):
-        self.cache = PathStore(GO2CACHE)
         self.history = PathStore(GO2HISTORY)
+        self.cache = PathStore(GO2CACHE)
 
         self.create_tasks()
-        ui = UI(self.poll)
+        ui = UI(self.pool)
 
         try:
             target = ui.run()
@@ -424,29 +450,33 @@ class Go2:
         except NotMatchException:
             print("Pattern does not match\r")
 
-        self.poll.terminate()
+        self.pool.terminate()
 
-    def history_not_related(self):
+    def history_not_overlapped(self):
         history_paths = []
-        for p in sorted(self.history.data, key=len):
+        for p in sorted(self.history.data.keys(), key=len):
             if any(p.startswith(x) for x in history_paths):
                 continue
+
             history_paths.append(p)
 
         print str.join('\n', history_paths)
+        return history_paths
 
     def create_tasks(self):
-        for pf in [self.cache, self.history]:
-            self.poll.add_task(file_task, pf)
+        self.pool.add_task(file_task, self.history)
+        self.pool.sleep_free_workers(1)
+
+        self.pool.add_task(file_task, self.cache)
 
         paths = [os.getcwd(), USERDIR]
-#        paths.extend(self.history.data)
+#        paths.extend(self.history_not_overlapped())
 
         if config.from_root:
             paths.append('/')
 
         for path in paths:
-            self.poll.add_task(tree_task, path)
+            self.pool.add_task(tree_task, path)
 
 
 def create_directory_wizard(path):
@@ -465,7 +495,7 @@ def create_directory_wizard(path):
 
     if answer == 'm':
         try:
-            os.mkdir(path)
+            config.fs.mkdir(path)
         except OSError, e:
             print e
             sys.exit(1)
@@ -479,7 +509,7 @@ def create_directory_wizard(path):
     Go2().main()
 
 
-def chdir_decorator():
+def chdir_decorator(wizzard=False):
     if not config.pattern:
         save_target(USERDIR)
         return 0
@@ -496,15 +526,15 @@ def chdir_decorator():
         save_target('-')
         return 0
 
-    if os.path.exists(target):
+    if config.fs.exists(target):
         save_in_history(target)
         save_target(target)
         return 0
 
-    return create_directory_wizard(target)
+    raise NotExistsException(target)
 
 
-def parse_args(args):
+def get_config(args):
     parser = argparse.ArgumentParser(
         prog='go2',
         description='''go2 is a fast directory finder.
@@ -531,27 +561,32 @@ for details.'''.format(VERSION),
 
     retval = parser.parse_args(args)
     retval.parser = parser
+
+    # process args
+    if retval.ignorecase:
+        retval.pattern = [x.lower() for x in retval.pattern]
+
     retval.match_func = match_single if len(retval.pattern) == 1 else match_multi
     retval.apply_case = str.lower if retval.ignorecase else str
 
-    if retval.ignorecase:
-        retval.pattern = [x.lower() for x in retval.pattern]
+    # application globals
+    retval.fs = OSFS('/')
+    retval.fs.makedir(GO2DIR, allow_recreate=True)
 
     return retval
 
 
 if __name__ == '__main__':
-    if not os.path.exists(GO2DIR):
-        os.mkdir(GO2DIR)
-
-    config = parse_args(sys.argv[1:])
-#    print config
+    config = get_config(sys.argv[1:])
 
     if config.setup:
         sys.exit(go2setup())
 
     if config.chdir:
-        sys.exit(chdir_decorator())
+        try:
+            sys.exit(chdir_decorator())
+        except NotExistsException, target:
+            sys.exit(create_directory_wizard(target))
 
     if not config.pattern:
         print("go2.py: error: too few arguments\n")
