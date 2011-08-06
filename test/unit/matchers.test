@@ -142,30 +142,4 @@ class Test_highligth(unittest.TestCase):
                           '/usr/s[hare]s/local/s[tow]s')
 
 
-class Test_match_single(unittest.TestCase):
-    def setUp(self):
-        self.config = go2.get_config([])
-        go2.config = self.config
-
-    def test_simple(self):
-        self.config.pattern = ['foo']
-
-        paths = [
-            '/foo',
-            '/buzz/foo',
-            'foo/bar/foo',
-            ]
-
-        for p in paths:
-            self.assert_(go2.match_single(p))
-
-
-class Test_match_multi(unittest.TestCase):
-    def setUp(self):
-        self.config = go2.get_config([])
-        go2.config = self.config
-
-
-
-UnitTestCase(Test_match)
-UnitTestCase(Test_highligth)
+UnitTestCase()
