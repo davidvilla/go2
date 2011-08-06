@@ -38,6 +38,7 @@ import select
 import termios
 import time
 import signal
+import re
 from operator import itemgetter
 
 from fs.osfs import OSFS
@@ -95,46 +96,113 @@ def high(text):
     return HIGH + text + LOW
 
 
-def highlight_pattern(pattern, path):
-    items = path.split(os.sep)
+def highlight(pattern, path, before=HIGH, after=LOW):
+    retval = ''
+    begin = 0
 
-    p = len(pattern) - 1
-    for i in range(len(items) - 1, -1, -1):
-        if p < 0:
-            break
+    re_str = pattern2re_contain(pattern)
+    mo = re.match(re_str, path, re.IGNORECASE)
 
-        if config.apply_case(items[i]).startswith(config.apply_case(pattern[p])):
-            orig = items[i][:len(pattern[p])]
-            items[i] = items[i].replace(orig, high(orig), 1)
-            p -= 1
+    for i in range(1, mo.lastindex + 1):
+        retval += mo.string[begin:mo.start(i)]
+        retval += before + mo.group(i) + after
+        begin = mo.end(i)
 
-    return os.sep.join(items)
-
-
-def match_single(path):
-    path = config.apply_case(path.strip('\n'))
-    return os.path.basename(path).startswith(config.pattern[0])
+    retval += mo.string[begin:]
+    return retval
 
 
-def match_multi(path):
-    path = config.apply_case(path.strip('\n'))
+#def highlight_pattern(pattern, path):
+#    items = path.split(os.sep)
+#
+#    p = len(pattern) - 1
+#    for i in range(len(items) - 1, -1, -1):
+#        if p < 0:
+#            break
+#
+#        if config.apply_case(items[i]).startswith(config.apply_case(pattern[p])):
+#            orig = items[i][:len(pattern[p])]
+#            items[i] = items[i].replace(orig, high(orig), 1)
+#            p -= 1
+#
+#    return os.sep.join(items)
 
-    pattern = config.pattern
-    items = path.split(os.sep)[1:]
 
-    match = items[-1].startswith(pattern[-1])
-    if not match:
-        return False
+class MatchLevel:
+    NO_MATCH = -1
+    START = 0
+    START_IGNORECASE = 1
+    CONTAIN = 2
+    CONTAIN_IGNORECASE = 3
 
-    p = len(pattern) - 2
-    for i in items[-2::-1]:
-        if p < 0:
-            return True
 
-        if i.startswith(pattern[p]):
-            p -= 1
+def pattern2re_start(pattern):
+    return str.join('', ['.*/({0})[^/]*'.format(x) for x in pattern]) + '$'
 
-    return False
+
+def pattern2re_contain(pattern):
+    return str.join('', ['.*/.*({0})[^/]*'.format(x) for x in pattern]) + '$'
+
+
+def match(path):
+    if False and len(config.pattern) == 1:
+        pattern = config.pattern[0]
+        basename = os.path.basename(path)
+        if re.match(pattern, basename):
+            return MatchLevel.START
+
+        if re.match(pattern, basename, re.IGNORECASE):
+            return MatchLevel.START_IGNORECASE
+
+        if re.search(pattern, basename):
+            return MatchLevel.CONTAIN
+
+        if re.search(pattern, basename, re.IGNORECASE):
+            return MatchLevel.CONTAIN_IGNORECASE
+
+        return MatchLevel.NO_MATCH
+
+    re_str = pattern2re_start(config.pattern)
+    if re.match(re_str, path):
+        return MatchLevel.START
+
+    if re.match(re_str, path, re.IGNORECASE):
+        return MatchLevel.START_IGNORECASE
+
+    re_str = pattern2re_contain(config.pattern)
+    if re.match(re_str, path):
+        return MatchLevel.CONTAIN
+
+    if re.match(re_str, path, re.IGNORECASE):
+        return MatchLevel.CONTAIN_IGNORECASE
+
+    return MatchLevel.NO_MATCH
+
+
+# def match_single(path):
+#     path = config.apply_case(path.strip('\n'))
+#     return os.path.basename(path).startswith(config.pattern[0])
+#
+#
+# def match_multi(path):
+#     path = config.apply_case(path.strip())
+#
+#     pattern = config.pattern
+#     items = path.split(os.sep)[1:]
+#
+#     match = items[-1].startswith(pattern[-1])
+#     if not match:
+#         return False
+#
+#     p = len(pattern) - 2
+#     for i in items[-2::-1]:
+#         if p < 0:
+#             return True
+#
+#         if i.startswith(pattern[p]):
+#             p -= 1
+#
+#     return False
 
 
 def save_target(path):
@@ -210,14 +278,15 @@ def save_in_history(path):
 
 def file_task(output, path_store):
     for path in path_store:
-        if not config.match_func(path):
+        level = match(path)
+        if level == MatchLevel.NO_MATCH:
             continue
 
         if not config.fs.exists(path):
             del path_store.data[path]
             continue
 
-        output.put(path)
+        output.put((path, level))
 
 
 class CommandTask:
@@ -239,13 +308,14 @@ class CommandTask:
         for path in self.ps.stdout:
             path = path.strip()
 
-            if not config.match_func(path):
+            level = match(path)
+            if level == MatchLevel.NO_MATCH:
                 continue
 
             if not config.fs.exists(path):
                 continue
 
-            self.output.put(path)
+            self.output.put((path, level))
 
 
 def tree_task(output, root):
@@ -285,8 +355,8 @@ class UI:
     def __init__(self, pool):
         self.pool = pool
         self.index = 0
-        self.paths = []
-        self.insert_enabled = True
+        self.paths = [list() for x in range(4)]
+        self.menu_open = True
 
     def run(self):
         tty = TTY()
@@ -318,28 +388,50 @@ class UI:
                 return election
 
     def refresh(self):
+        if not self.menu_open:
+            return
+
         try:
             while 1:
                 msg = self.pool.output_queue.get(timeout=0.1)
-
-                if isinstance(msg, str) and self.insert_enabled:
-                    self.insert_path(msg)
+                self.insert_path(*msg)
 
         except Queue.Empty:
             pass
 
         except FullException:
-            self.insert_enabled = False
+            self.menu_open = False
             rprint('Warning: Too many matches!\n')
 
-        if self.pool.has_tasks() and self.insert_enabled:
+        rprint(' ' * 20)
+
+        if self.pool.has_tasks() and self.menu_open:
             rprint('Searching... ' + str())
             return
 
-        if not self.paths:
+        if self.menu_open:
+            self.add_secondary_matches()
+
+        if not self.paths[0]:
             raise NotMatchException
 
         rprint('Select a path: ')
+        self.menu_open = False
+
+    def add_secondary_matches(self):
+        try:
+            for path_list in self.paths[1:]:
+                if not path_list:
+                    continue
+
+                rprint('   ~~~\n')
+
+                for path in path_list:
+                    self.insert_path(path, 0)
+
+                del path_list[:]
+        except FullException:
+            pass
 
     def key2election(self, key):
         if key in [ESC, CTRL_C]:
@@ -353,11 +445,17 @@ class UI:
     def is_valid_election(self, election):
         return election in [None] + range(0, self.index)
 
-    def insert_path(self, path):
-        if path in self.paths:
+    def insert_path(self, path, level):
+        target = self.paths[level]
+
+        if path in target:
             return
 
-        self.paths.append(path)
+        target.append(path)
+
+        if level > MatchLevel.START:
+            return
+
         self.index += 1
         if self.index > self.max_size:
             raise FullException
@@ -369,9 +467,15 @@ class UI:
         if self.index == 1:
             suffix += ' [ENTER]'
 
+        self.show_path(path, suffix)
+
+    def show_path(self, path, suffix):
+        path = highlight(config.pattern, path)
+        path = re.sub('^{0}'.format(USERDIR), '~', path)
+
         rprint("{char:c}: {path}{suffix}\r\n".format(**dict(
                     char = self.index + ord('a') - 1,
-                    path = highlight_pattern(config.pattern, path).replace(USERDIR, '~', 1),
+                    path = path,
                     suffix = suffix)))
 
 
@@ -564,7 +668,6 @@ for details.'''.format(VERSION),
     if retval.ignorecase:
         retval.pattern = [x.lower() for x in retval.pattern]
 
-    retval.match_func = match_single if len(retval.pattern) == 1 else match_multi
     retval.apply_case = str.lower if retval.ignorecase else str
 
     # application globals

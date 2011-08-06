@@ -11,6 +11,136 @@ from pyDoubles.framework import *
 sys.path.append('$basedir')
 
 import go2
+from go2 import MatchLevel as Level
+
+
+class Test_match(unittest.TestCase):
+    def setUp(self):
+        self.config = go2.get_config([])
+        go2.config = self.config
+
+
+    def assert_match(self, pattern, result, paths):
+        self.config.pattern = pattern
+        for p in paths:
+            self.assertEquals(go2.match(p), result)
+
+    def test_single(self):
+        self.assert_match(
+            ['foo'], Level.START,
+            ['/foo',
+             '/buzz/foobar',
+             '/foo/bar/foofoo',
+             ])
+
+    def test_single_i18n(self):
+        self.assert_match(
+            ['ñandú'], Level.START,
+            ['/ñandú',
+             '/buzz/ñandúmar',
+             ])
+
+    def test_single_negative(self):
+        self.assert_match(
+            ['foo'], Level.NO_MATCH,
+            ['/foa',
+             '/buzz/foo/bar',
+             '/foo/bar/but',
+             ])
+
+    def test_single_ignorecase(self):
+        self.assert_match(
+            ['foo'], Level.START_IGNORECASE,
+            ['/Foo',
+             '/buzz/fOo',
+             '/foo/bar/FOO',
+             ])
+
+    def disable_test_single_ignorecase_i18n(self):
+        self.assert_match(
+            ['ñandú'], Level.START_IGNORECASE,
+            ['/Ñandúfoo',
+             '/ñandÚbar',
+             '/buzz/ñandúmar',
+            ])
+
+    def test_single_contain(self):
+        self.assert_match(
+            ['foo'], Level.CONTAIN,
+            ['/bafoo',
+             '/buzz/tafoobar',
+             '/foo/bar/fofoofoOO',
+             ])
+
+    def test_single_contain_insensitve(self):
+        self.assert_match(
+            ['FOO'], Level.CONTAIN_IGNORECASE,
+            ['/bafoo',
+             '/buzz/tafOobar',
+             '/foo/bar/fofoofOO',
+             ])
+
+
+    def test_multi(self):
+        self.assert_match(
+            ['usr', 'loc'], Level.START,
+            ['/usr/share/local',
+             '/mnt/usr-doc/lib/loc',
+             ])
+
+    def test_multi_negative(self):
+        self.assert_match(
+            ['usr', 'loc'], Level.NO_MATCH,
+            ['/usr/share/aloal',
+             '/bin/local',
+             '/usr/share/doc',
+             ])
+
+    def test_multi_ignorecase(self):
+        self.assert_match(
+            ['usr', 'loc'], Level.START_IGNORECASE,
+            ['/usr/share/LOCAL',
+#             '/mnt/Usr-doc/lib/loc',
+             ])
+
+    def test_multi_contain(self):
+        self.assert_match(
+            ['sr', 'oca'], Level.CONTAIN,
+            ['/usr/share/local',
+             '/mnt/usr-doc/lib/local',
+             ])
+
+
+class Test_highligth(unittest.TestCase):
+    def high(self, pattern, path):
+        return go2.highlight(pattern, path, '[', ']')
+
+    def test_single(self):
+        self.assertEquals(self.high(['sto'], '/usr/local/stow'),
+                          '/usr/local/[sto]w')
+
+        self.assertEquals(self.high(['sto'], '/usr/local/stow-1/stow-2'),
+                          '/usr/local/stow-1/[sto]w-2')
+
+    def test_single_ignorecase(self):
+        self.assertEquals(self.high(['STO'], '/usr/mostow/local/stow'),
+                          '/usr/mostow/local/[sto]w')
+
+        self.assertEquals(self.high(['sto'], '/usr/local/STOW'),
+                          '/usr/local/[STO]W')
+
+    def test_single_contains(self):
+        self.assertEquals(self.high(['tow'], '/usr/mostow/local/stow'),
+                          '/usr/mostow/local/s[tow]')
+
+    def test_multi(self):
+        self.assertEquals(self.high(['shar', 'sto'], '/usr/share/local/stow'),
+                          '/usr/[shar]e/local/[sto]w')
+
+    def test_multi_contains(self):
+        self.assertEquals(self.high(['hare', 'tow'], '/usr/shares/local/stows'),
+                          '/usr/s[hare]s/local/s[tow]s')
+
 
 class Test_match_single(unittest.TestCase):
     def setUp(self):
@@ -37,4 +167,5 @@ class Test_match_multi(unittest.TestCase):
 
 
 
-UnitTestCase()
+UnitTestCase(Test_match)
+UnitTestCase(Test_highligth)

@@ -89,7 +89,7 @@ class Test_file_task(unittest.TestCase, StubFS):
         spy = empty_spy()
         file_task(spy, sut)
 
-        assert_that_was_called(spy.put).with_args('/home/user/lab')
+        assert_that_was_called(spy.put).with_args(('/home/user/lab', 0))
 
     def test_search_missing(self):
         "file_task remove checked missing paths"
