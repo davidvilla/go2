@@ -312,7 +312,8 @@ class UI:
     def __init__(self, pool):
         self.pool = pool
         self.index = 0
-        self.paths = [list() for x in range(4)]
+        self.paths = []
+        self.alternate_paths = [list() for x in range(3)]
         self.menu_open = True
 
     def run(self):
@@ -369,7 +370,7 @@ class UI:
         if self.menu_open:
             self.add_secondary_matches()
 
-        if not self.paths[0]:
+        if not self.paths:
             raise NotMatchException
 
         rprint('Select a path: ')
@@ -377,7 +378,7 @@ class UI:
 
     def add_secondary_matches(self):
         try:
-            for path_list in self.paths[1:]:
+            for path_list in self.alternate_paths:
                 if not path_list:
                     continue
 
@@ -403,7 +404,7 @@ class UI:
         return election in [None] + range(0, self.index)
 
     def insert_path(self, path, level):
-        target = self.paths[level]
+        target = self.paths if level == 0 else self.alternate_paths[level - 1]
 
         if path in target:
             return
@@ -538,7 +539,7 @@ class Go2:
             self.pool.add_task(tree_task, path)
 
 
-def create_directory_wizard(path):
+def create_directory_wizzard(path):
     basetarget = os.path.basename(path)
     print "cd: '%s' does not exist. Cancel, Search or Make? (C,s,m):" % basetarget,
 
@@ -554,7 +555,7 @@ def create_directory_wizard(path):
 
     if answer == 'm':
         try:
-            config.fs.mkdir(path)
+            config.fs.makedir(path)
         except OSError, e:
             print e
             sys.exit(1)
@@ -644,7 +645,7 @@ if __name__ == '__main__':
         try:
             sys.exit(chdir_decorator())
         except NotExistsException, target:
-            sys.exit(create_directory_wizard(target))
+            sys.exit(create_directory_wizzard(target.args[0]))
 
     if not config.pattern:
         print("go2.py: error: too few arguments\n")
