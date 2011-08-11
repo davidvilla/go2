@@ -44,7 +44,6 @@ from fs.osfs import OSFS
 from fs import ResourceNotFoundError
 
 import logging
-log = logging.getLogger('go2')
 
 import argparse
 
@@ -71,6 +70,11 @@ VERSION = '1.20110805'
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
 
+logging.basicConfig(
+    filename=os.path.join(GO2DIR, 'log'), filemode='w',
+    format='%(asctime)-15s %(message)s',
+    level=logging.DEBUG)
+
 
 def go2setup(mode='r+'):
     try:
@@ -87,7 +91,7 @@ def go2setup(mode='r+'):
 
 
 def rprint(cad=''):
-    sys.stdout.write('\r' + cad)
+    sys.stdout.write('\r%s' % cad)
     sys.stdout.flush()
 
 
@@ -128,22 +132,22 @@ def pattern2re_contain(pattern):
 
 
 def match(path):
-    if False and len(config.pattern) == 1:
-        pattern = config.pattern[0]
-        basename = os.path.basename(path)
-        if re.match(pattern, basename):
-            return MatchLevel.START
-
-        if re.match(pattern, basename, re.IGNORECASE):
-            return MatchLevel.START_IGNORECASE
-
-        if re.search(pattern, basename):
-            return MatchLevel.CONTAIN
-
-        if re.search(pattern, basename, re.IGNORECASE):
-            return MatchLevel.CONTAIN_IGNORECASE
-
-        return MatchLevel.NO_MATCH
+#    if False and len(config.pattern) == 1:
+#        pattern = config.pattern[0]
+#        basename = os.path.basename(path)
+#        if re.match(pattern, basename):
+#            return MatchLevel.START
+#
+#        if re.match(pattern, basename, re.IGNORECASE):
+#            return MatchLevel.START_IGNORECASE
+#
+#        if re.search(pattern, basename):
+#            return MatchLevel.CONTAIN
+#
+#        if re.search(pattern, basename, re.IGNORECASE):
+#            return MatchLevel.CONTAIN_IGNORECASE
+#
+#        return MatchLevel.NO_MATCH
 
     re_str = pattern2re_start(config.pattern)
     if re.match(re_str, path):
@@ -163,8 +167,7 @@ def match(path):
 
 
 def save_target(path):
-    with config.fs.open(GO2TMP, 'w') as fd:
-        fd.write(path)
+    config.fs.setcontents(GO2TMP, path)
 
 
 class PathStore:
@@ -256,16 +259,20 @@ class CommandTask:
                         stdout=subp.PIPE, stderr=subp.PIPE,
                         preexec_fn = os.setsid)
 
-        signal.signal(signal.SIGTERM, self.signal_handler)
-        self.communicate()
+        signal.signal(signal.SIGTERM, self.terminate)
+        try:
+            self.communicate()
+        except IOError:
+            self.terminate()
 
-    def signal_handler(self, signum, *args):
-        os.killpg(self.ps.pid, signal.SIGTERM)
-        time.sleep(0.1)
-        os.killpg(self.ps.pid, signal.SIGKILL)
-        time.sleep(0.1)
-        self.ps.wait()
-##        sys.exit(1)
+    def terminate(self, *args):
+        try:
+            os.killpg(self.ps.pid, signal.SIGTERM)
+            time.sleep(0.15)
+            os.killpg(self.ps.pid, signal.SIGKILL)
+            self.ps.wait()
+        except OSError:
+            pass
 
     def communicate(self):
         for path in self.ps.stdout:
@@ -283,10 +290,6 @@ class CommandTask:
 
 def tree_task(output, root):
     CommandTask(output, "tree -dfin --noreport %s" % root)
-
-
-class FullException(Exception):
-    pass
 
 
 class CancelException(Exception):
@@ -317,7 +320,6 @@ class UI:
 
     def __init__(self, pool):
         self.pool = pool
-        self.index = 0
         self.paths = []
         self.alternate_paths = [list() for x in range(3)]
         self.menu_open = True
@@ -341,7 +343,7 @@ class UI:
         while 1:
             self.refresh()
 
-            keypress = poll.poll(500)
+            keypress = poll.poll(100)
             if not keypress:
                 continue
 
@@ -349,53 +351,43 @@ class UI:
             election = self.key2election(key)
 
             if self.is_valid_election(election):
+                logging.debug('election is %s', election)
                 return election
 
     def refresh(self):
-        if not self.menu_open:
-            return
-
         try:
             while 1:
                 msg = self.pool.output_queue.get(timeout=0.1)
-                self.insert_path(*msg)
+                self.process_match(*msg)
 
         except Queue.Empty:
             pass
 
-        except FullException:
-            self.menu_open = False
-            rprint('Warning: Too many matches!\n')
-
         rprint(' ' * 20)
 
-        if self.pool.has_tasks() and self.menu_open:
-            rprint('Searching... ' + str())
-            return
-
         if self.menu_open:
+            if self.pool.has_tasks():
+                rprint('Searching... ')
+                return
+
             self.add_secondary_matches()
 
         if not self.paths:
             raise NotMatchException
 
         rprint('Select a path: ')
-        self.menu_open = False
 
     def add_secondary_matches(self):
-        try:
-            for path_list in self.alternate_paths:
-                if not path_list:
-                    continue
+        for path_list in self.alternate_paths:
+            if not path_list:
+                continue
 
-                rprint('   ~~~\n')
+            rprint('   ~~~\n')
 
-                for path in path_list:
-                    self.insert_path(path, 0)
+            for path in path_list:
+                self.process_match(path, 0)
 
-                del path_list[:]
-        except FullException:
-            pass
+            del path_list[:]
 
     def key2election(self, key):
         if key in [ESC, CTRL_C]:
@@ -407,9 +399,10 @@ class UI:
         return key - ord('a')
 
     def is_valid_election(self, election):
-        return election in [None] + range(0, self.index)
+        return election in [None] + range(0, len(self.paths))
 
-    def insert_path(self, path, level):
+    def process_match(self, path, level):
+        logging.debug("%s:%s" % (path, level))
         target = self.paths if level == 0 else self.alternate_paths[level - 1]
 
         if path in target:
@@ -417,28 +410,32 @@ class UI:
 
         target.append(path)
 
-        if level > MatchLevel.START:
+        if level != MatchLevel.START or not self.menu_open:
             return
 
-        self.index += 1
-        if self.index > self.max_size:
-            raise FullException
+        self.add_to_menu(path)
 
+    def add_to_menu(self, path):
         suffix = ''
         if path == os.getcwd():
             suffix = ' (the current directory)'
 
-        if self.index == 1:
+        if len(self.paths) == 1:
             suffix += ' [ENTER]'
 
         self.show_path(path, suffix)
+
+        if len(self.paths) == self.max_size:
+            self.menu_open = False
+            rprint('Warning: Too many matches!\r\n')
+            rprint('Select a path: ')
 
     def show_path(self, path, suffix):
         path = high_pattern(config.pattern, path)
         path = re.sub('^{0}'.format(USERDIR), '~', path)
 
         rprint("{char:c}: {path}{suffix}\r\n".format(**dict(
-                    char = self.index + ord('a') - 1,
+                    char = len(self.paths) + ord('a') - 1,
                     path = path,
                     suffix = suffix)))
 
@@ -461,10 +458,6 @@ class ProcessPool(object):
     def add_task(self, func, *args):
         self.task_queue.put((func, args))
 
-    @staticmethod
-    def sleep(queue, t):
-        time.sleep(t)
-
     def sleep_free_workers(self, time):
         ntasks = self.task_queue._unfinished_tasks._semlock._get_value()
         for i in range(len(self.workers) - ntasks):
@@ -474,6 +467,8 @@ class ProcessPool(object):
         return not self.task_queue._unfinished_tasks._semlock._is_zero()
 
     def terminate(self):
+        logging.debug('terminating pool')
+
         for w in self.workers:
             self.task_queue.put('STOP')
 
@@ -481,20 +476,21 @@ class ProcessPool(object):
 
         for w in self.workers:
             if w.is_alive():
-#                print 'terminating', w
+                logging.debug('terminating %s', w)
                 w.terminate()
+#                time.sleep(0.5)
 
-            if w.is_alive():
-                os.kill(w.pid, signal.SIGKILL)
+#            if w.is_alive():
+#                os.kill(w.pid, signal.SIGKILL)
 
             w.join()
-#            print 'joined', w
+            logging.debug('joined %s', w)
 
     @staticmethod
     def worker(tasks, output):
         for func, args in iter(tasks.get, 'STOP'):
             func(output, *args)
-#            tasks.task_done()
+            tasks.task_done()
 
 
 class Go2:
@@ -513,6 +509,7 @@ class Go2:
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
+            logging.debug("saved history %s", len(ui.paths))
             self.cache.insert_and_save(ui.paths)
 
         except CancelException:
@@ -522,6 +519,7 @@ class Go2:
             print("Pattern does not match\r")
 
         self.pool.terminate()
+        logging.debug('end')
 
     def history_not_overlapped(self):
         history_paths = []
@@ -531,7 +529,7 @@ class Go2:
 
             history_paths.append(p)
 
-        print str.join('\n', history_paths)
+#        print str.join('\n', history_paths)
         return history_paths
 
     def create_tasks(self):
@@ -542,7 +540,7 @@ class Go2:
 
         paths = []
         paths.extend([os.getcwd(), USERDIR])
-        paths.extend(self.history_not_overlapped())
+#        paths.extend(self.history_not_overlapped())
 
         if config.from_root:
             paths.append('/')
