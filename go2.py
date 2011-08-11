@@ -92,10 +92,10 @@ def rprint(cad=''):
 
 
 def high(text):
-    return HIGH + text + LOW
+    return config.before + text + config.after
 
 
-def highlight(pattern, path, before=HIGH, after=LOW):
+def high_pattern(pattern, path):
     retval = ''
     begin = 0
 
@@ -104,7 +104,7 @@ def highlight(pattern, path, before=HIGH, after=LOW):
 
     for i in range(1, mo.lastindex + 1):
         retval += mo.string[begin:mo.start(i)]
-        retval += before + mo.group(i) + after
+        retval += config.before + mo.group(i) + config.after
         begin = mo.end(i)
 
     retval += mo.string[begin:]
@@ -184,13 +184,16 @@ class PathStore:
 
         try:
             with config.fs.open(self.path) as fd:
-                # FIXME: try readline
-                for line in fd.read().split('\n'):
+                for line in fd:
                     line = line.strip()
                     if not line:
                         continue
 
-                    visits, path = line.split(':', 1)
+                    try:
+                        visits, path = line.split(':', 1)
+                    except ValueError:
+                        visits, path = 1, line
+
                     self.data[path.strip()] = int(visits)
         finally:
             del fd
@@ -257,9 +260,12 @@ class CommandTask:
         self.communicate()
 
     def signal_handler(self, signum, *args):
-        os.killpg(self.ps.pid, signum)
+        os.killpg(self.ps.pid, signal.SIGTERM)
+        time.sleep(0.1)
+        os.killpg(self.ps.pid, signal.SIGKILL)
+        time.sleep(0.1)
         self.ps.wait()
-        sys.exit(1)
+##        sys.exit(1)
 
     def communicate(self):
         for path in self.ps.stdout:
@@ -428,7 +434,7 @@ class UI:
         self.show_path(path, suffix)
 
     def show_path(self, path, suffix):
-        path = highlight(config.pattern, path)
+        path = high_pattern(config.pattern, path)
         path = re.sub('^{0}'.format(USERDIR), '~', path)
 
         rprint("{char:c}: {path}{suffix}\r\n".format(**dict(
@@ -475,14 +481,20 @@ class ProcessPool(object):
 
         for w in self.workers:
             if w.is_alive():
+#                print 'terminating', w
                 w.terminate()
-                w.join()
+
+            if w.is_alive():
+                os.kill(w.pid, signal.SIGKILL)
+
+            w.join()
+#            print 'joined', w
 
     @staticmethod
     def worker(tasks, output):
         for func, args in iter(tasks.get, 'STOP'):
             func(output, *args)
-            tasks.task_done()
+#            tasks.task_done()
 
 
 class Go2:
@@ -530,7 +542,7 @@ class Go2:
 
         paths = []
         paths.extend([os.getcwd(), USERDIR])
-#2        paths.extend(self.history_not_overlapped())
+        paths.extend(self.history_not_overlapped())
 
         if config.from_root:
             paths.append('/')
@@ -631,6 +643,9 @@ for details.'''.format(VERSION),
     # application globals
     retval.fs = OSFS('/')
     retval.fs.makedir(GO2DIR, allow_recreate=True)
+
+    retval.before = HIGH
+    retval.after = LOW
 
     return retval
 

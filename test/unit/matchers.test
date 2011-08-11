@@ -111,34 +111,37 @@ class Test_match(unittest.TestCase):
              ])
 
 
-class Test_highligth(unittest.TestCase):
-    def high(self, pattern, path):
-        return go2.highlight(pattern, path, '[', ']')
+class Test_high_pattern(unittest.TestCase):
+    def setUp(self):
+        self.config = go2.get_config([])
+        self.config.before = '['
+        self.config.after = ']'
+        go2.config = self.config
 
     def test_single(self):
-        self.assertEquals(self.high(['sto'], '/usr/local/stow'),
+        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/stow'),
                           '/usr/local/[sto]w')
 
-        self.assertEquals(self.high(['sto'], '/usr/local/stow-1/stow-2'),
+        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/stow-1/stow-2'),
                           '/usr/local/stow-1/[sto]w-2')
 
     def test_single_ignorecase(self):
-        self.assertEquals(self.high(['STO'], '/usr/mostow/local/stow'),
+        self.assertEquals(go2.high_pattern(['STO'], '/usr/mostow/local/stow'),
                           '/usr/mostow/local/[sto]w')
 
-        self.assertEquals(self.high(['sto'], '/usr/local/STOW'),
+        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/STOW'),
                           '/usr/local/[STO]W')
 
     def test_single_contains(self):
-        self.assertEquals(self.high(['tow'], '/usr/mostow/local/stow'),
+        self.assertEquals(go2.high_pattern(['tow'], '/usr/mostow/local/stow'),
                           '/usr/mostow/local/s[tow]')
 
     def test_multi(self):
-        self.assertEquals(self.high(['shar', 'sto'], '/usr/share/local/stow'),
+        self.assertEquals(go2.high_pattern(['shar', 'sto'], '/usr/share/local/stow'),
                           '/usr/[shar]e/local/[sto]w')
 
     def test_multi_contains(self):
-        self.assertEquals(self.high(['hare', 'tow'], '/usr/shares/local/stows'),
+        self.assertEquals(go2.high_pattern(['hare', 'tow'], '/usr/shares/local/stows'),
                           '/usr/s[hare]s/local/s[tow]s')
 
 

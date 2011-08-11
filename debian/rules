@@ -17,13 +17,13 @@ override_dh_auto_clean:
 	dh_auto_clean
 	-$(RM) go2.1
 
-get-orig:
+get-orig-source:
 	$(ORIG_REPO) $(ORIG_DIR)
 	tar $(EXCLUDE) -czf ../tarballs/$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
 	$(RM) -r $(ORIG_DIR)
 
 # FOR UPSTREAM USE ONLY!
-build-orig:
+build-orig-source:
 	mkdir -p $(ORIG_DIR)
 	tar $(EXCLUDE) --exclude=$(ORIG_DIR) -cf - . | ( cd $(ORIG_DIR) && tar xf - )
 	tar -czf ../tarballs/$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
