@@ -39,6 +39,7 @@ import termios
 import time
 import signal
 import re
+from threading import Thread
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
@@ -255,6 +256,8 @@ def file_task(output, path_store):
 class CommandTask:
     def __init__(self, output, command):
         self.output = output
+        self.command = command
+
         self.ps = subp.Popen(command, shell=True, close_fds=True,
                         stdout=subp.PIPE, stderr=subp.PIPE,
                         preexec_fn = os.setsid)
@@ -267,13 +270,23 @@ class CommandTask:
             self.terminate()
 
     def terminate(self, *args):
+        if self.abort:
+            return
+
+        logging.info('%s: terminate', self)
+        self.abort = True
+
         try:
-            self.abort = True
             os.killpg(self.ps.pid, signal.SIGTERM)
             time.sleep(0.15)
-            os.killpg(self.ps.pid, signal.SIGKILL)
-            #self.ps.wait()
-            os.waitpid(self.ps.pid, os.WNOHANG)
+
+            if self.ps.poll() is None:
+                logging.info('%s: SIGKILL', self)
+                os.killpg(self.ps.pid, signal.SIGKILL)
+
+            logging.info("%s: poll %s", self, self.ps.poll())
+            self.ps.wait()
+#            os.waitpid(self.ps.pid, os.WNOHANG)
         except OSError:
             pass
 
@@ -292,6 +305,9 @@ class CommandTask:
                 continue
 
             self.output.put((path, level))
+
+    def __str__(self):
+        return "CommandTask '{0}'".format(self.command)
 
 
 def tree_task(output, root):
@@ -385,6 +401,9 @@ class UI:
 
     def add_secondary_matches(self):
         for path_list in self.alternate_paths:
+            if not self.menu_open:
+                return
+
             if not path_list:
                 continue
 
@@ -480,17 +499,28 @@ class ProcessPool(object):
 
         time.sleep(0.1)
 
-        for w in self.workers:
-            if w.is_alive():
-                logging.debug('terminating %s', w)
-                w.terminate()
+#        term_threads = []
+#        for w in self.workers:
+#            if w.is_alive():
+#                logging.debug('terminating %s', w)
+#                term_threads.append(Thread(target=w.terminate))
+
+        term_threads = [Thread(target=w.terminate) for w in self.workers if w.is_alive()]
+
+        for t in term_threads:
+            t.start()
+
+        for t in term_threads:
+            t.join()
+
+#                w.terminate()
 #                time.sleep(0.5)
 
 #            if w.is_alive():
 #                os.kill(w.pid, signal.SIGKILL)
 
 #            w.join()
-            logging.debug('joined %s', w)
+#            logging.debug('joined %s', w)
 
     @staticmethod
     def worker(tasks, output):
@@ -511,8 +541,10 @@ class Go2:
         self.create_tasks()
         ui = UI(self.pool)
 
+        tini = time.time()
         try:
             target = ui.run()
+            tini = time.time()
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
@@ -529,6 +561,7 @@ class Go2:
 
         self.pool.terminate()
         logging.debug('end')
+        print("{0:.2}s".format(time.time() - tini))
         return retval
 
     def history_not_overlapped(self):
