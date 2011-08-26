@@ -1,8 +1,8 @@
-go2 (1.20110810-1) unstable; urgency=low
+go2 (1.20110818-1) unstable; urgency=low
 
   * New upstream release
 
- -- David Villa Alises <David.Villa@uclm.es>  Thu, 11 Aug 2011 04:40:53 +0200
+ -- David Villa Alises <David.Villa@uclm.es>  Thu, 18 Aug 2011 01:37:09 +0200
 
 go2 (0.20110717-1) unstable; urgency=low
 

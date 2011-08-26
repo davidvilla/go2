@@ -259,6 +259,7 @@ class CommandTask:
                         stdout=subp.PIPE, stderr=subp.PIPE,
                         preexec_fn = os.setsid)
 
+        self.abort = False
         signal.signal(signal.SIGTERM, self.terminate)
         try:
             self.communicate()
@@ -267,15 +268,20 @@ class CommandTask:
 
     def terminate(self, *args):
         try:
+            self.abort = True
             os.killpg(self.ps.pid, signal.SIGTERM)
             time.sleep(0.15)
             os.killpg(self.ps.pid, signal.SIGKILL)
-            self.ps.wait()
+            #self.ps.wait()
+            os.waitpid(self.ps.pid, os.WNOHANG)
         except OSError:
             pass
 
     def communicate(self):
         for path in self.ps.stdout:
+            if self.abort:
+                return
+
             path = path.strip()
 
             level = match(path)
@@ -382,7 +388,7 @@ class UI:
             if not path_list:
                 continue
 
-            rprint('   ~~~\n')
+            rprint('   ~~~        \n')
 
             for path in path_list:
                 self.process_match(path, 0)
@@ -483,7 +489,7 @@ class ProcessPool(object):
 #            if w.is_alive():
 #                os.kill(w.pid, signal.SIGKILL)
 
-            w.join()
+#            w.join()
             logging.debug('joined %s', w)
 
     @staticmethod
@@ -498,6 +504,7 @@ class Go2:
         self.pool = ProcessPool()
 
     def main(self):
+        retval = 0
         self.history = PathStore(GO2HISTORY)
         self.cache = PathStore(GO2CACHE)
 
@@ -514,12 +521,15 @@ class Go2:
 
         except CancelException:
             print("Canceled by user")
+            retval = 1
 
         except NotMatchException:
             print("Pattern does not match\r")
+            retval = 1
 
         self.pool.terminate()
         logging.debug('end')
+        return retval
 
     def history_not_overlapped(self):
         history_paths = []
@@ -665,4 +675,4 @@ if __name__ == '__main__':
         config.parser.print_help()
         sys.exit(1)
 
-    Go2().main()
+    sys.exit(Go2().main())
