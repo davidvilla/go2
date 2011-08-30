@@ -541,10 +541,8 @@ class Go2:
         self.create_tasks()
         ui = UI(self.pool)
 
-        tini = time.time()
         try:
             target = ui.run()
-            tini = time.time()
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
@@ -561,7 +559,6 @@ class Go2:
 
         self.pool.terminate()
         logging.debug('end')
-        print("{0:.2}s".format(time.time() - tini))
         return retval
 
     def history_not_overlapped(self):
@@ -577,7 +574,7 @@ class Go2:
 
     def create_tasks(self):
         self.pool.add_task(file_task, self.history)
-        self.pool.sleep_free_workers(1)
+#        self.pool.sleep_free_workers(1)
 
         self.pool.add_task(file_task, self.cache)
 
