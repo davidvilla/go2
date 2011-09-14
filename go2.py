@@ -280,7 +280,7 @@ class CommandTask:
             os.killpg(self.ps.pid, signal.SIGTERM)
             time.sleep(0.15)
 
-            if self.ps.poll() is None:
+            while self.ps.poll() is None:
                 logging.info('%s: SIGKILL', self)
                 os.killpg(self.ps.pid, signal.SIGKILL)
 
