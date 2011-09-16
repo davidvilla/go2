@@ -1,4 +1,16 @@
+go2 (1.20110914-1) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@uclm.es>  Wed, 14 Sep 2011 19:43:58 +0200
+
 go2 (1.20110818-1) unstable; urgency=low
+
+  * Add Vcs-* fields.
+
+ -- Jakub Wilk <jwilk@debian.org>  Sat, 10 Sep 2011 01:54:44 +0200
+
+go2 (1.20110805-1) unstable; urgency=low
 
   * New upstream release
 
