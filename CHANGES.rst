@@ -1,7 +1,8 @@
-
-------------
+Release 1.20110916
+------------------
 
 * New multiprocess version (without GUI)
+* Log to tmp
 
 
 Release 0.20110716

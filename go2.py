@@ -30,8 +30,7 @@ except (OSError, ValueError):
 
 os.environ['LANG'] = 'C'
 
-import multiprocessing as mp
-import subprocess as subp
+import pwd
 import Queue
 import tty
 import select
@@ -40,6 +39,9 @@ import time
 import signal
 import re
 from threading import Thread
+import multiprocessing as mp
+import subprocess as subp
+
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
@@ -72,7 +74,8 @@ ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
 
 logging.basicConfig(
-    filename=os.path.join(GO2DIR, 'log'), filemode='w',
+    filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
+    filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
 
