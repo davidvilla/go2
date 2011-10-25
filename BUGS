@@ -67,3 +67,48 @@ Traceback (most recent call last):
   File "/usr/lib/python2.6/multiprocessing/forking.py", line 106, in poll
     pid, sts = os.waitpid(self.pid, flag)
 KeyboardInterrupt
+
+---------------
+
+
+^CError in atexit._run_exitfuncs:
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/atexit.py", line 24, in _run_exitfuncs
+Process Process-1:
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/multiprocessing/process.py", line 258, in _bootstrap
+    func(*targs, **kargs)
+  File "/usr/lib/python2.7/multiprocessing/util.py", line 295, in _exit_function
+    p.join()
+  File "/usr/lib/python2.7/multiprocessing/process.py", line 145, in join
+    self.run()
+  File "/usr/lib/python2.7/multiprocessing/process.py", line 114, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/go2/go2.py", line 531, in worker
+    func(output, *args)
+  File "/usr/lib/go2/go2.py", line 317, in tree_task
+    CommandTask(output, "tree -dfin --noreport %s" % root)
+  File "/usr/lib/go2/go2.py", line 271, in __init__
+    self.communicate()
+  File "/usr/lib/go2/go2.py", line 298, in communicate
+    if self.abort:
+KeyboardInterrupt
+    res = self._popen.wait(timeout)
+  File "/usr/lib/python2.7/multiprocessing/forking.py", line 148, in wait
+    return self.poll(0)
+  File "/usr/lib/python2.7/multiprocessing/forking.py", line 133, in poll
+    pid, sts = os.waitpid(self.pid, flag)
+KeyboardInterrupt
+Error in sys.exitfunc:
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/atexit.py", line 24, in _run_exitfuncs
+    func(*targs, **kargs)
+  File "/usr/lib/python2.7/multiprocessing/util.py", line 295, in _exit_function
+    p.join()
+  File "/usr/lib/python2.7/multiprocessing/process.py", line 145, in join
+    res = self._popen.wait(timeout)
+  File "/usr/lib/python2.7/multiprocessing/forking.py", line 148, in wait
+    return self.poll(0)
+  File "/usr/lib/python2.7/multiprocessing/forking.py", line 133, in poll
+    pid, sts = os.waitpid(self.pid, flag)
+KeyboardInterrupt
