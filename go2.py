@@ -41,6 +41,7 @@ import re
 from threading import Thread
 import multiprocessing as mp
 import subprocess as subp
+import shlex
 
 
 from fs.osfs import OSFS
@@ -68,10 +69,12 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 
-VERSION = '1.20110805'
+VERSION = '1.20111104'
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
+
+STOP = 'STOP'
 
 logging.basicConfig(
     filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
@@ -101,6 +104,18 @@ def rprint(cad=''):
 
 def high(text):
     return config.before + text + config.after
+
+
+class ListUniq(list):
+    def append(self, item):
+        if item in self:
+            return
+
+        list.append(self, item)
+
+    def extend(self, other):
+        for item in other:
+            self.append(item)
 
 
 def high_pattern(pattern, path):
@@ -261,37 +276,63 @@ class CommandTask:
         self.output = output
         self.command = command
 
-        self.ps = subp.Popen(command, shell=True, close_fds=True,
-                        stdout=subp.PIPE, stderr=subp.PIPE,
-                        preexec_fn = os.setsid)
+        self.ps = subp.Popen(
+            shlex.split(command),
+            bufsize    = 0,
+            shell      = False,
+            close_fds  = True,
+            stdout     = subp.PIPE,
+            stderr     = subp.PIPE,
+            preexec_fn = os.setsid)
+
+        logging.info('%s: starts', self)
 
         self.abort = False
         signal.signal(signal.SIGTERM, self.terminate)
+
         try:
             self.communicate()
         except IOError:
             self.terminate()
 
+#    def is_alive2(self):
+#        try:
+#            self.ps.send_signal(0)
+#        except OSError:
+#            return False
+#
+#        return True
+
+    def is_alive(self):
+#        return self.ps.poll() is None
+        value = os.waitpid(self.ps.pid, os.WNOHANG)
+        logging.debug('%s: waitpid %s ', self, value)
+        return value == (0, 0)
+#        return os.waitpid(self.ps.pid, os.WNOHANG) == (0, 0)
+
     def terminate(self, *args):
         if self.abort:
             return
 
-        logging.info('%s: terminate', self)
         self.abort = True
+        logging.info('%s: terminate', self)
 
         try:
-            os.killpg(self.ps.pid, signal.SIGTERM)
+            self.ps.send_signal(signal.SIGTERM)
+#            os.killpg(self.ps.pid, signal.SIGTERM)
             time.sleep(0.15)
 
-            while self.ps.poll() is None:
-                logging.info('%s: SIGKILL', self)
-                os.killpg(self.ps.pid, signal.SIGKILL)
+            while self.is_alive():
+                logging.info('%s: SIGKILLed', self)
+                self.ps.send_signal(signal.SIGKILL)
+#                os.killpg(self.ps.pid, signal.SIGKILL)
+                time.sleep(0.1)
 
-            logging.info("%s: poll %s", self, self.ps.poll())
-            self.ps.wait()
-#            os.waitpid(self.ps.pid, os.WNOHANG)
-        except OSError:
-            pass
+        except OSError, e:
+            logging.error('%s: %s', self, e)
+
+        # WARN: This kills the worker running this task
+        sys.exit()
 
     def communicate(self):
         for path in self.ps.stdout:
@@ -310,7 +351,7 @@ class CommandTask:
             self.output.put((path, level))
 
     def __str__(self):
-        return "CommandTask '{0}'".format(self.command)
+        return "CommandTask pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
 
 
 def tree_task(output, root):
@@ -472,64 +513,68 @@ def sleep(queue, t):
     time.sleep(t)
 
 
+class ThreadStarted(Thread):
+    def __init__(self, *args, **kargs):
+        Thread.__init__(self, *args, **kargs)
+        self.start()
+
+
+class Worker(mp.Process):
+    def __init__(self, tasks, output):
+        self.tasks = tasks
+        self.output = output
+        mp.Process.__init__(self)
+        self.start()
+
+    def run(self):
+        for func, args in iter(self.tasks.get, STOP):
+            func(self.output, *args)
+            self.tasks.task_done()
+
+        self.tasks.task_done()
+
+
+# class TaskQueue(mp.JoinableQueue):
+#     def qsize(self):
+#         return self._unfinished_tasks._semlock._get_value()
+#
+#     def empty(self):
+#         return self.task_queue._unfinished_tasks._semlock._is_zero()
+
+
 class ProcessPool(object):
     def __init__(self):
         self.task_queue = mp.JoinableQueue()
         self.output_queue = mp.Queue()
 
-        self.workers = []
-        for i in range(mp.cpu_count() - 1):
-            worker = mp.Process(target=self.worker, args=(self.task_queue, self.output_queue))
-            worker.start()
-            self.workers.append(worker)
+        self.workers = [Worker(self.task_queue, self.output_queue)
+                        for x in range(mp.cpu_count())]
 
     def add_task(self, func, *args):
         self.task_queue.put((func, args))
 
     def sleep_free_workers(self, time):
-        ntasks = self.task_queue._unfinished_tasks._semlock._get_value()
-        for i in range(len(self.workers) - ntasks):
+        for i in range(len(self.workers) - self.task_queue.qsize()):
             self.add_task(sleep, time)
 
     def has_tasks(self):
-        return not self.task_queue._unfinished_tasks._semlock._is_zero()
+        return not self.task_queue.empty()
 
     def terminate(self):
-        logging.debug('terminating pool')
+        logging.debug('pool: terminating')
 
         for w in self.workers:
-            self.task_queue.put('STOP')
+            self.task_queue.put(STOP)
 
         time.sleep(0.1)
 
-#        term_threads = []
-#        for w in self.workers:
-#            if w.is_alive():
-#                logging.debug('terminating %s', w)
-#                term_threads.append(Thread(target=w.terminate))
-
-        term_threads = [Thread(target=w.terminate) for w in self.workers if w.is_alive()]
-
-        for t in term_threads:
-            t.start()
+        term_threads = [ThreadStarted(target=w.terminate) for w in self.workers
+                        if w.is_alive()]
 
         for t in term_threads:
             t.join()
 
-#                w.terminate()
-#                time.sleep(0.5)
-
-#            if w.is_alive():
-#                os.kill(w.pid, signal.SIGKILL)
-
-#            w.join()
-#            logging.debug('joined %s', w)
-
-    @staticmethod
-    def worker(tasks, output):
-        for func, args in iter(tasks.get, 'STOP'):
-            func(output, *args)
-            tasks.task_done()
+        logging.debug('pool: terminated')
 
 
 class Go2:
@@ -564,7 +609,7 @@ class Go2:
         logging.debug('end')
         return retval
 
-    def history_not_overlapped(self):
+    def not_overlapped_history(self):
         history_paths = []
         for p in sorted(self.history.data.keys(), key=len):
             if any(p.startswith(x) for x in history_paths):
@@ -581,9 +626,9 @@ class Go2:
 
         self.pool.add_task(file_task, self.cache)
 
-        paths = []
+        paths = ListUniq()
         paths.extend([os.getcwd(), USERDIR])
-#        paths.extend(self.history_not_overlapped())
+#        paths.extend(self.not_overlapped_history())
 
         if config.from_root:
             paths.append('/')
@@ -649,14 +694,16 @@ def chdir_decorator(wizzard=False):
 
 def get_config(args):
     parser = argparse.ArgumentParser(
-        prog='go2',
-        description='''go2 is a fast directory finder.
+        prog = 'go2',
+        description = '''\
+go2 is a fast directory finder.
+
 This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''.format(VERSION),
-        epilog='.',
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        epilog = '.',
+        formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('pattern', nargs='*', help="pattern to find")
     parser.add_argument('--cd', dest='chdir', action="store_true",
