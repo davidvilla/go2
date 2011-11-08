@@ -26,5 +26,5 @@ get-orig-source:
 build-orig-source:
 	mkdir -p $(ORIG_DIR)
 	tar $(EXCLUDE) --exclude=$(ORIG_DIR) -cf - . | ( cd $(ORIG_DIR) && tar xf - )
-	tar -czf ../tarballs/$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
+	tar -czf ../$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
 	$(RM) -r $(ORIG_DIR)

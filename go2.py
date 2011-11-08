@@ -407,9 +407,13 @@ class UI:
         poll.register(sys.stdin, select.POLLIN)
 
         while 1:
-            self.refresh()
+            self.process_pending()
 
             keypress = poll.poll(100)
+
+            if not self.menu_open:
+                return 0
+
             if not keypress:
                 continue
 
@@ -420,7 +424,7 @@ class UI:
                 logging.debug('election is %s', election)
                 return election
 
-    def refresh(self):
+    def process_pending(self):
         try:
             while 1:
                 msg = self.pool.output_queue.get(timeout=0.1)
@@ -437,6 +441,8 @@ class UI:
                 return
 
             self.add_secondary_matches()
+
+        self.menu_open = False
 
         if not self.paths:
             raise NotMatchException
@@ -479,10 +485,8 @@ class UI:
 
         target.append(path)
 
-        if level != MatchLevel.START or not self.menu_open:
-            return
-
-        self.add_to_menu(path)
+        if level == MatchLevel.START and self.menu_open:
+            self.add_to_menu(path)
 
     def add_to_menu(self, path):
         suffix = ''

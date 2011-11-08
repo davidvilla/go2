@@ -3,7 +3,7 @@ Section: utils
 Priority: extra
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Uploaders: Francisco Moya <paco@debian.org>
-Build-Depends: debhelper (>= 7.0.50~), python (>= 2.6.6-3~), rst2man
+Build-Depends: debhelper (>= 7.0.50~), python (>= 2.6.6-3~), python-docutils
 Standards-Version: 3.9.2
 Homepage: http://savannah.nongnu.org/projects/go2/
 Vcs-Svn: svn://svn.debian.org/python-apps/packages/go2/trunk/

@@ -1,8 +1,14 @@
+Release 1.20111008
+------------------
+
+* Subprocess termination fixed.
+
+
 Release 1.20110916
 ------------------
 
 * New multiprocess version (without GUI)
-* Log to tmp
+* Log to /tmp/go2-$USER
 
 
 Release 0.20110716
