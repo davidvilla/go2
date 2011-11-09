@@ -40,6 +40,7 @@ import signal
 import re
 from threading import Thread
 import multiprocessing as mp
+import multiprocessing.queues as mp_queues
 import subprocess as subp
 import shlex
 
@@ -390,6 +391,9 @@ class UI:
         self.alternate_paths = [list() for x in range(3)]
         self.menu_open = True
 
+        self.poll = select.poll()
+        self.poll.register(sys.stdin, select.POLLIN)
+
     def run(self):
         tty = TTY()
         tty.set_raw()
@@ -403,26 +407,27 @@ class UI:
         return self.paths[election]
 
     def wait_for_election(self):
-        poll = select.poll()
-        poll.register(sys.stdin, select.POLLIN)
-
         while 1:
             self.process_pending()
 
-            keypress = poll.poll(100)
+            key = self.get_key()
+            if key is None:
+                if self.menu_open:
+                    continue
 
-            if not self.menu_open:
                 return 0
 
-            if not keypress:
-                continue
+        election = self.key2election(key)
+        if self.is_valid_election(election):
+            logging.debug('election is %s', election)
+            return election
 
-            key = ord(sys.stdin.read(1))
-            election = self.key2election(key)
+    def get_key(self):
+        keypress = self.poll.poll(100)
+        if not keypress:
+            return None
 
-            if self.is_valid_election(election):
-                logging.debug('election is %s', election)
-                return election
+        return ord(sys.stdin.read(1))
 
     def process_pending(self):
         try:
@@ -477,7 +482,7 @@ class UI:
         return election in [None] + range(0, len(self.paths))
 
     def process_match(self, path, level):
-        logging.debug("%s:%s" % (path, level))
+        logging.debug("path:%s level:%s" % (path, level))
         target = self.paths if level == 0 else self.alternate_paths[level - 1]
 
         if path in target:
@@ -538,17 +543,14 @@ class Worker(mp.Process):
         self.tasks.task_done()
 
 
-# class TaskQueue(mp.JoinableQueue):
-#     def qsize(self):
-#         return self._unfinished_tasks._semlock._get_value()
-#
-#     def empty(self):
-#         return self.task_queue._unfinished_tasks._semlock._is_zero()
+class TaskQueue(mp_queues.JoinableQueue):
+    def unfinished_tasks_count(self):
+        return self._unfinished_tasks._semlock._get_value()
 
 
 class ProcessPool(object):
     def __init__(self):
-        self.task_queue = mp.JoinableQueue()
+        self.task_queue = TaskQueue()
         self.output_queue = mp.Queue()
 
         self.workers = [Worker(self.task_queue, self.output_queue)
@@ -558,11 +560,11 @@ class ProcessPool(object):
         self.task_queue.put((func, args))
 
     def sleep_free_workers(self, time):
-        for i in range(len(self.workers) - self.task_queue.qsize()):
+        for i in range(len(self.workers) - self.task_queue.unfinished_tasks_count()):
             self.add_task(sleep, time)
 
     def has_tasks(self):
-        return not self.task_queue.empty()
+        return self.task_queue.unfinished_tasks_count() != 0
 
     def terminate(self):
         logging.debug('pool: terminating')

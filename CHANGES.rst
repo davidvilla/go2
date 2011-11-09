@@ -1,7 +1,8 @@
-Release 1.20111008
+Release 1.20111009
 ------------------
 
 * Subprocess termination fixed.
+* Automatic election for single match.
 
 
 Release 1.20110916
