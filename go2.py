@@ -196,30 +196,31 @@ class PathStore:
     def __init__(self, path, size=1000):
         self.path = path
         self.size = size
+        self.data = {}
         self.load()
 #        self.log = logging.getLogger('PathStore [%s]' % os.path.split(path)[-1])
 
     def load(self):
-        self.data = {}
 
-        if not config.fs.exists(self.path):
-            return
+        def load_file_lines(fd):
+            for line in fd:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    visits, path = line.split(':', 1)
+                except ValueError:
+                    visits, path = 1, line
+
+                self.data[path.strip()] = int(visits)
 
         try:
             with config.fs.open(self.path) as fd:
-                for line in fd:
-                    line = line.strip()
-                    if not line:
-                        continue
+                load_file_lines(fd)
 
-                    try:
-                        visits, path = line.split(':', 1)
-                    except ValueError:
-                        visits, path = 1, line
-
-                    self.data[path.strip()] = int(visits)
-        finally:
-            del fd
+        except ResourceNotFoundError:
+            pass
 
     def __iter__(self):
         def _cmp(p1, p2):
@@ -412,15 +413,15 @@ class UI:
 
             key = self.get_key()
             if key is None:
-                if self.menu_open:
-                    continue
+                if not self.menu_open and len(self.paths) == 1:
+                    return 0
 
-                return 0
+                continue
 
-        election = self.key2election(key)
-        if self.is_valid_election(election):
-            logging.debug('election is %s', election)
-            return election
+            election = self.key2election(key)
+            if self.is_valid_election(election):
+                logging.debug('election is %s', election)
+                return election
 
     def get_key(self):
         keypress = self.poll.poll(100)
