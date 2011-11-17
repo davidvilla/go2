@@ -433,8 +433,8 @@ class UI:
     def process_pending(self):
         try:
             while 1:
-                msg = self.pool.output_queue.get(timeout=0.1)
-                self.process_match(*msg)
+                path, level = self.pool.output_queue.get(timeout=0.1)
+                self.process_match(path, level)
 
         except Queue.Empty:
             pass
@@ -550,12 +550,13 @@ class TaskQueue(mp_queues.JoinableQueue):
 
 
 class ProcessPool(object):
-    def __init__(self):
+    def __init__(self, num_workers=None):
         self.task_queue = TaskQueue()
         self.output_queue = mp.Queue()
 
+        num_workers = num_workers or mp.cpu_count()
         self.workers = [Worker(self.task_queue, self.output_queue)
-                        for x in range(mp.cpu_count())]
+                        for x in range(num_workers)]
 
     def add_task(self, func, *args):
         self.task_queue.put((func, args))
@@ -583,6 +584,11 @@ class ProcessPool(object):
 
         logging.debug('pool: terminated')
 
+    def join(self):
+        while self.has_tasks():
+            time.sleep(0.1)
+
+        self.terminate()
 
 class Go2:
     def __init__(self):
@@ -601,6 +607,7 @@ class Go2:
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
+
             logging.debug("saved history %s", len(ui.paths))
             self.cache.insert_and_save(ui.paths)
 
