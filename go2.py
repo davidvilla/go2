@@ -40,8 +40,11 @@ import signal
 import re
 from threading import Thread
 import multiprocessing as mp
+import multiprocessing.queues as mp_queues
 import subprocess as subp
+import shlex
 
+import gobject
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
@@ -68,16 +71,64 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 
-VERSION = '1.20110805'
+VERSION = '1.20111104'
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
+
+STOP = 'STOP'
 
 logging.basicConfig(
     filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
     filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
+
+
+class FilteredObservable(object):
+    def __init__(self):
+        self.observers = []
+        self.filters = []
+
+    def register(self, ob):
+        self.observers.append(ob)
+
+    def add_filter(self, f):
+        self.filters.append(f)
+
+    def notify(self, item):
+        if any(f(item) for f in self.filters):
+            return
+
+        for ob in self.observers:
+            ob(item)
+
+
+class QueueReactor(gobject.MainLoop):
+
+    class QueueExtractor(object):
+        def __init__(self, queue, callback, *args):
+            self.queue = queue
+            self.callback = callback
+            self.args = args
+
+        def __call__(self, value):
+            print 'called'
+            self.callback(self.queue.get(), value, *self.args)
+
+    def queue_add_watch(self, queue, callback, *args):
+        gobject.io_add_watch(queue._reader.fileno(),
+                             gobject.IO_IN,
+                             QueueReactor.QueueExtractor(queue, callback, *args))
+
+    def process_pending(self):
+        context = self.get_context()
+
+        while context.pending():
+            context.iteration()
+
+    def run(self):
+        gobject.MainLoop.run(self)
 
 
 def go2setup(mode='r+'):
@@ -101,6 +152,18 @@ def rprint(cad=''):
 
 def high(text):
     return config.before + text + config.after
+
+
+class ListUniq(list):
+    def append(self, item):
+        if item in self:
+            return
+
+        list.append(self, item)
+
+    def extend(self, other):
+        for item in other:
+            self.append(item)
 
 
 def high_pattern(pattern, path):
@@ -180,30 +243,31 @@ class PathStore:
     def __init__(self, path, size=1000):
         self.path = path
         self.size = size
+        self.data = {}
         self.load()
 #        self.log = logging.getLogger('PathStore [%s]' % os.path.split(path)[-1])
 
     def load(self):
-        self.data = {}
 
-        if not config.fs.exists(self.path):
-            return
+        def load_file_lines(fd):
+            for line in fd:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    visits, path = line.split(':', 1)
+                except ValueError:
+                    visits, path = 1, line
+
+                self.data[path.strip()] = int(visits)
 
         try:
             with config.fs.open(self.path) as fd:
-                for line in fd:
-                    line = line.strip()
-                    if not line:
-                        continue
+                load_file_lines(fd)
 
-                    try:
-                        visits, path = line.split(':', 1)
-                    except ValueError:
-                        visits, path = 1, line
-
-                    self.data[path.strip()] = int(visits)
-        finally:
-            del fd
+        except ResourceNotFoundError:
+            pass
 
     def __iter__(self):
         def _cmp(p1, p2):
@@ -243,7 +307,7 @@ def save_in_history(path):
     PathStore(GO2HISTORY).insert_and_save(path)
 
 
-def file_task(output, path_store):
+def from_file_provider(path_store):
     for path in path_store:
         level = match(path)
         if level == MatchLevel.NO_MATCH:
@@ -253,68 +317,94 @@ def file_task(output, path_store):
             del path_store.data[path]
             continue
 
-        output.put((path, level))
+        yield path, level
+#        output.put((path, level))
 
 
-class CommandTask:
-    def __init__(self, output, command):
-        self.output = output
+class CommandProvider:
+    def __init__(self, command):
         self.command = command
 
-        self.ps = subp.Popen(command, shell=True, close_fds=True,
-                        stdout=subp.PIPE, stderr=subp.PIPE,
-                        preexec_fn = os.setsid)
+        self.ps = subp.Popen(
+            shlex.split(command),
+            bufsize    = 0,
+            shell      = False,
+            close_fds  = True,
+            stdout     = subp.PIPE,
+            stderr     = subp.PIPE,
+            preexec_fn = os.setsid)
+
+        logging.info('%s: starts', self)
 
         self.abort = False
         signal.signal(signal.SIGTERM, self.terminate)
-        try:
-            self.communicate()
-        except IOError:
-            self.terminate()
+
+#    def is_alive2(self):
+#        try:
+#            self.ps.send_signal(0)
+#        except OSError:
+#            return False
+#
+#        return True
+
+    def is_alive(self):
+#        return self.ps.poll() is None
+        value = os.waitpid(self.ps.pid, os.WNOHANG)
+        logging.debug('%s: waitpid %s ', self, value)
+        return value == (0, 0)
+#        return os.waitpid(self.ps.pid, os.WNOHANG) == (0, 0)
 
     def terminate(self, *args):
         if self.abort:
             return
 
-        logging.info('%s: terminate', self)
         self.abort = True
+        logging.info('%s: terminate', self)
 
         try:
-            os.killpg(self.ps.pid, signal.SIGTERM)
+            self.ps.send_signal(signal.SIGTERM)
+#            os.killpg(self.ps.pid, signal.SIGTERM)
             time.sleep(0.15)
 
-            while self.ps.poll() is None:
-                logging.info('%s: SIGKILL', self)
-                os.killpg(self.ps.pid, signal.SIGKILL)
+            while self.is_alive():
+                logging.info('%s: SIGKILLed', self)
+                self.ps.send_signal(signal.SIGKILL)
+#                os.killpg(self.ps.pid, signal.SIGKILL)
+                time.sleep(0.1)
 
-            logging.info("%s: poll %s", self, self.ps.poll())
-            self.ps.wait()
-#            os.waitpid(self.ps.pid, os.WNOHANG)
-        except OSError:
-            pass
+        except OSError, e:
+            logging.error('%s: %s', self, e)
 
-    def communicate(self):
-        for path in self.ps.stdout:
-            if self.abort:
-                return
+        # WARN: This kills the worker running this provider
+        sys.exit()
 
-            path = path.strip()
+    def __iter__(self):
+        try:
+            for path in self.ps.stdout:
+                if self.abort:
+                    return
 
-            level = match(path)
-            if level == MatchLevel.NO_MATCH:
-                continue
+                path = path.strip()
 
-            if not config.fs.exists(path):
-                continue
+                level = match(path)
+                if level == MatchLevel.NO_MATCH:
+                    continue
 
-            self.output.put((path, level))
+                if not config.fs.exists(path):
+                    continue
+
+                yield path, level
+#               self.output.put((path, level))
+
+        except IOError:
+            self.terminate()
 
     def __str__(self):
-        return "CommandTask '{0}'".format(self.command)
+        return "CommandProvider pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
 
 
-def tree_task(output, root):
-    CommandTask(output, "tree -dfin --noreport %s" % root)
+def tree_provider(root):
+    return CommandProvider('tree -dfin --noreport %s' % root)
 
 
 class CancelException(Exception):
@@ -326,6 +416,10 @@ class NotMatchException(Exception):
 
 
 class NotExistsException(Exception):
+    pass
+
+
+class NothingToDoException(Exception):
     pass
 
 
@@ -349,41 +443,56 @@ class UI:
         self.alternate_paths = [list() for x in range(3)]
         self.menu_open = True
 
+        self.poll = select.poll()
+        self.poll.register(sys.stdin, select.POLLIN)
+
     def run(self):
         tty = TTY()
         tty.set_raw()
 
         try:
-            election = self.wait_for_election()
+            choice = self.wait_for_choice()
         finally:
             tty.restore()
             rprint()
 
-        return self.paths[election]
+        return self.paths[choice]
 
-    def wait_for_election(self):
-        poll = select.poll()
-        poll.register(sys.stdin, select.POLLIN)
+    def wait_for_choice(self):
+        def single_match():
+            return not self.menu_open and len(self.paths) == 1
 
         while 1:
-            self.refresh()
+            self.process_pending()
 
-            keypress = poll.poll(100)
-            if not keypress:
+            key = self.get_key()
+            if key is None:
+                if single_match():
+                    rprint('(single match)\n')
+                    return 0
+
                 continue
 
-            key = ord(sys.stdin.read(1))
-            election = self.key2election(key)
+            choice = self.key2choice(key)
+            if self.is_valid_choice(choice):
+                logging.debug('choice is %s', choice)
+                return choice
 
-            if self.is_valid_election(election):
-                logging.debug('election is %s', election)
-                return election
+    def get_key(self):
+        keypress = self.poll.poll(100)
+        if not keypress:
+            return None
 
-    def refresh(self):
+        return ord(sys.stdin.read(1))
+
+    def process_pending(self):
         try:
             while 1:
-                msg = self.pool.output_queue.get(timeout=0.1)
-                self.process_match(*msg)
+                item = self.pool.output_queue.get(timeout=0.1)
+                if item is None:
+                    continue
+
+                self.process_match(*item)
 
         except Queue.Empty:
             pass
@@ -396,6 +505,8 @@ class UI:
                 return
 
             self.add_secondary_matches()
+
+        self.menu_open = False
 
         if not self.paths:
             raise NotMatchException
@@ -417,7 +528,7 @@ class UI:
 
             del path_list[:]
 
-    def key2election(self, key):
+    def key2choice(self, key):
         if key in [ESC, CTRL_C]:
             raise CancelException
 
@@ -426,11 +537,11 @@ class UI:
 
         return key - ord('a')
 
-    def is_valid_election(self, election):
-        return election in [None] + range(0, len(self.paths))
+    def is_valid_choice(self, choice):
+        return choice in [None] + range(0, len(self.paths))
 
     def process_match(self, path, level):
-        logging.debug("%s:%s" % (path, level))
+        logging.debug("path:%s level:%s" % (path, level))
         target = self.paths if level == 0 else self.alternate_paths[level - 1]
 
         if path in target:
@@ -438,10 +549,8 @@ class UI:
 
         target.append(path)
 
-        if level != MatchLevel.START or not self.menu_open:
-            return
-
-        self.add_to_menu(path)
+        if level == MatchLevel.START and self.menu_open:
+            self.add_to_menu(path)
 
     def add_to_menu(self, path):
         suffix = ''
@@ -468,68 +577,83 @@ class UI:
                     suffix = suffix)))
 
 
-def sleep(queue, t):
+def sleep(t):
     time.sleep(t)
 
 
+class ThreadStarted(Thread):
+    def __init__(self, *args, **kargs):
+        Thread.__init__(self, *args, **kargs)
+        self.start()
+
+
+class Worker(mp.Process):
+    def __init__(self, tasks, output):
+        self.tasks = tasks
+        self.output = output
+        mp.Process.__init__(self)
+        self.start()
+
+    def run(self):
+        for func, args in iter(self.tasks.get, STOP):
+            self.push(func(*args))
+            self.tasks.task_done()
+
+        self.tasks.task_done()
+
+    def push(self, source):
+        try:
+            for x in source:
+                self.output.put(x)
+        except TypeError:
+            self.output.put(source)
+
+
+class TaskQueue(mp_queues.JoinableQueue):
+    def unfinished_tasks_count(self):
+        return self._unfinished_tasks._semlock._get_value()
+
+
 class ProcessPool(object):
-    def __init__(self):
-        self.task_queue = mp.JoinableQueue()
+    def __init__(self, num_workers=None):
+        self.task_queue = TaskQueue()
         self.output_queue = mp.Queue()
 
-        self.workers = []
-        for i in range(mp.cpu_count() - 1):
-            worker = mp.Process(target=self.worker, args=(self.task_queue, self.output_queue))
-            worker.start()
-            self.workers.append(worker)
+        num_workers = num_workers or mp.cpu_count()
+        self.workers = [Worker(self.task_queue, self.output_queue)
+                        for x in range(num_workers)]
 
     def add_task(self, func, *args):
         self.task_queue.put((func, args))
 
     def sleep_free_workers(self, time):
-        ntasks = self.task_queue._unfinished_tasks._semlock._get_value()
-        for i in range(len(self.workers) - ntasks):
+        for i in range(len(self.workers) - self.task_queue.unfinished_tasks_count()):
             self.add_task(sleep, time)
 
     def has_tasks(self):
-        return not self.task_queue._unfinished_tasks._semlock._is_zero()
+        return self.task_queue.unfinished_tasks_count() != 0
 
     def terminate(self):
-        logging.debug('terminating pool')
+        logging.debug('pool: terminating')
 
         for w in self.workers:
-            self.task_queue.put('STOP')
+            self.task_queue.put(STOP)
 
         time.sleep(0.1)
 
-#        term_threads = []
-#        for w in self.workers:
-#            if w.is_alive():
-#                logging.debug('terminating %s', w)
-#                term_threads.append(Thread(target=w.terminate))
-
-        term_threads = [Thread(target=w.terminate) for w in self.workers if w.is_alive()]
-
-        for t in term_threads:
-            t.start()
+        term_threads = [ThreadStarted(target=w.terminate) for w in self.workers
+                        if w.is_alive()]
 
         for t in term_threads:
             t.join()
 
-#                w.terminate()
-#                time.sleep(0.5)
+        logging.debug('pool: terminated')
 
-#            if w.is_alive():
-#                os.kill(w.pid, signal.SIGKILL)
+    def join(self):
+        while self.has_tasks():
+            time.sleep(0.1)
 
-#            w.join()
-#            logging.debug('joined %s', w)
-
-    @staticmethod
-    def worker(tasks, output):
-        for func, args in iter(tasks.get, 'STOP'):
-            func(output, *args)
-            tasks.task_done()
+        self.terminate()
 
 
 class Go2:
@@ -546,25 +670,33 @@ class Go2:
 
         try:
             target = ui.run()
+            if target == os.getcwd():
+                raise NothingToDoException
+
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
-            logging.debug("saved history %s", len(ui.paths))
+
+            logging.debug("Saved history %s", len(ui.paths))
             self.cache.insert_and_save(ui.paths)
 
         except CancelException:
-            print("Canceled by user")
+            print("(canceled by user)")
             retval = 1
 
         except NotMatchException:
-            print("Pattern does not match\r")
+            print("(pattern does not match)\r")
             retval = 1
+
+        except NothingToDoException:
+            print("(nothing to do)")
+            retval = 0
 
         self.pool.terminate()
         logging.debug('end')
         return retval
 
-    def history_not_overlapped(self):
+    def not_overlapped_history(self):
         history_paths = []
         for p in sorted(self.history.data.keys(), key=len):
             if any(p.startswith(x) for x in history_paths):
@@ -576,20 +708,20 @@ class Go2:
         return history_paths
 
     def create_tasks(self):
-        self.pool.add_task(file_task, self.history)
-#        self.pool.sleep_free_workers(1)
+        self.pool.add_task(from_file_provider, self.history)
+        self.pool.sleep_free_workers(1)
 
-        self.pool.add_task(file_task, self.cache)
+        self.pool.add_task(from_file_provider, self.cache)
 
-        paths = []
+        paths = ListUniq()
         paths.extend([os.getcwd(), USERDIR])
-#        paths.extend(self.history_not_overlapped())
+#        paths.extend(self.not_overlapped_history())
 
         if config.from_root:
             paths.append('/')
 
         for path in paths:
-            self.pool.add_task(tree_task, path)
+            self.pool.add_task(tree_provider, path)
 
 
 def create_directory_wizzard(path):
@@ -647,16 +779,20 @@ def chdir_decorator(wizzard=False):
     raise NotExistsException(target)
 
 
-def get_config(args):
+def get_config(args=None):
+    args = args or []
+
     parser = argparse.ArgumentParser(
-        prog='go2',
-        description='''go2 is a fast directory finder.
+        prog = 'go2',
+        description = '''\
+go2 is a fast directory finder.
+
 This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''.format(VERSION),
-        epilog='.',
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        epilog = '.',
+        formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('pattern', nargs='*', help="pattern to find")
     parser.add_argument('--cd', dest='chdir', action="store_true",

@@ -1,0 +1,14 @@
+2011-11-06 12:53:58,337 /home/david/repos/prometeo/doc/informes/E10.2.2-analisis-requisitos:0
+2011-11-06 12:53:58,339 /home/david/repos/prometeo/doc/informes/E10.2.2-analisis-requisitos:0
+2011-11-06 12:53:58,343 /home/david/repos/prometeo/doc/informes/E10.2.2-estado-del-arte:0
+2011-11-06 12:53:58,361 CommandTask pid:3606 cmd:'tree -dfin --noreport /home/david': starts
+2011-11-06 12:53:59,245 election is 0
+2011-11-06 12:53:59,273 saved history 2
+2011-11-06 12:53:59,273 pool: terminating
+2011-11-06 12:53:59,374 CommandTask pid:3606 cmd:'tree -dfin --noreport /home/david': terminate
+2011-11-06 12:53:59,375 pool: terminated
+2011-11-06 12:53:59,375 end
+2011-11-06 12:53:59,525 CommandTask pid:3606 cmd:'tree -dfin --noreport /home/david': waitpid (0, 0)
+2011-11-06 12:53:59,525 CommandTask pid:3606 cmd:'tree -dfin --noreport /home/david': SIGKILLed
+2011-11-06 12:53:59,626 CommandTask pid:3606 cmd:'tree -dfin --noreport /home/david': waitpid (3606, 9)
+2011-11-06 12:53:59,631 CommandTask pid:3608 cmd:'tree -dfin --noreport /home/david': starts

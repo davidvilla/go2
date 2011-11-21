@@ -14,7 +14,7 @@ from fs.memoryfs import MemoryFS
 from pyDoubles.framework import *
 
 import go2
-from go2 import PathStore, file_task
+from go2 import PathStore, from_file_provider
 
 HOME = '/home/user'
 
@@ -30,12 +30,12 @@ class StubFS(object):
     def mkdir(self, relpath):
         self.fs.makedir(fs.join(HOME, relpath), recursive=True)
 
-    def PathStore_with_content(self, path, more=''):
-        self.fs.createfile(path, '''\
+    def PathStore_with_content(self, fpath, more=''):
+        self.fs.createfile(fpath, '''\
 1: /home/user/lab
 2: /home/user/lab/media
 ''' + more)
-        return PathStore(path)
+        return PathStore(fpath)
 
 
 class Test_PathStore(unittest.TestCase, StubFS):
@@ -43,10 +43,14 @@ class Test_PathStore(unittest.TestCase, StubFS):
         StubFS.setUp(self)
 
     def test_load_ok(self):
-        sut = self.PathStore_with_content('paths')
+        sut = self.PathStore_with_content(fpath='paths')
         self.assertEquals(set(sut.data.keys()),
                           set(['/home/user/lab',
                                '/home/user/lab/media']))
+
+    def test_load_missing(self):
+        sut = PathStore('missing')
+        self.assertEquals(sut.data, {})
 
     def assert_visits(self, store_path, path, visits):
         self.assertIn("{0}:{1}\n".format(visits, path),
@@ -78,7 +82,7 @@ class Test_PathStore(unittest.TestCase, StubFS):
         self.assertEquals(list(sut)[0], path)
 
 
-class Test_file_task(unittest.TestCase, StubFS):
+class Test_from_file_provider(unittest.TestCase, StubFS):
     def setUp(self):
         StubFS.setUp(self)
 
@@ -86,19 +90,17 @@ class Test_file_task(unittest.TestCase, StubFS):
         sut = self.PathStore_with_content('paths')
         go2.config.pattern = ['la']
 
-        spy = empty_spy()
-        file_task(spy, sut)
+        paths = list(from_file_provider(sut))
 
-        assert_that_was_called(spy.put).with_args(('/home/user/lab', 0))
+        self.assertIn(('/home/user/lab', 0), paths)
 
     def test_search_missing(self):
-        "file_task remove checked missing paths"
+        "from_file_provider remove checked missing paths"
         sut = self.PathStore_with_content('paths')
         go2.config.pattern = ['med']
 
-        spy = empty_spy()
-        file_task(spy.put, sut)
+        paths = list(from_file_provider(sut))
 
-        assert_that_method(spy.put).was_never_called()
+        self.assertFalse(paths)
 
 UnitTestCase()

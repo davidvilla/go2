@@ -1,8 +1,20 @@
+Release 1.20111011
+------------------
+
+* single match fixed.
+
+Release 1.20111009
+------------------
+
+* Subprocess termination fixed.
+* Automatic election for single match.
+
+
 Release 1.20110916
 ------------------
 
 * New multiprocess version (without GUI)
-* Log to tmp
+* Log to /tmp/go2-$USER
 
 
 Release 0.20110716
