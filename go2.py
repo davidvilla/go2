@@ -30,6 +30,7 @@ except (OSError, ValueError):
 
 os.environ['LANG'] = 'C'
 
+import collections
 import pwd
 import Queue
 import tty
@@ -260,7 +261,7 @@ def save_in_history(path):
     PathStore(GO2HISTORY).insert_and_save(path)
 
 
-def file_task(output, path_store):
+def from_file_provider(path_store):
     for path in path_store:
         level = match(path)
         if level == MatchLevel.NO_MATCH:
@@ -270,12 +271,12 @@ def file_task(output, path_store):
             del path_store.data[path]
             continue
 
-        output.put((path, level))
+        yield path, level
+#        output.put((path, level))
 
 
-class CommandTask:
-    def __init__(self, output, command):
-        self.output = output
+class CommandProvider:
+    def __init__(self, command):
         self.command = command
 
         self.ps = subp.Popen(
@@ -291,11 +292,6 @@ class CommandTask:
 
         self.abort = False
         signal.signal(signal.SIGTERM, self.terminate)
-
-        try:
-            self.communicate()
-        except IOError:
-            self.terminate()
 
 #    def is_alive2(self):
 #        try:
@@ -333,31 +329,36 @@ class CommandTask:
         except OSError, e:
             logging.error('%s: %s', self, e)
 
-        # WARN: This kills the worker running this task
+        # WARN: This kills the worker running this provider
         sys.exit()
 
-    def communicate(self):
-        for path in self.ps.stdout:
-            if self.abort:
-                return
+    def __iter__(self):
+        try:
+            for path in self.ps.stdout:
+                if self.abort:
+                    return
 
-            path = path.strip()
+                path = path.strip()
 
-            level = match(path)
-            if level == MatchLevel.NO_MATCH:
-                continue
+                level = match(path)
+                if level == MatchLevel.NO_MATCH:
+                    continue
 
-            if not config.fs.exists(path):
-                continue
+                if not config.fs.exists(path):
+                    continue
 
-            self.output.put((path, level))
+                yield path, level
+#               self.output.put((path, level))
+
+        except IOError:
+            self.terminate()
 
     def __str__(self):
-        return "CommandTask pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
+        return "CommandProvider pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
 
 
-def tree_task(output, root):
-    CommandTask(output, "tree -dfin --noreport %s" % root)
+def tree_provider(root):
+    return CommandProvider('tree -dfin --noreport %s' % root)
 
 
 class CancelException(Exception):
@@ -369,6 +370,10 @@ class NotMatchException(Exception):
 
 
 class NotExistsException(Exception):
+    pass
+
+
+class NothingToDoException(Exception):
     pass
 
 
@@ -400,28 +405,32 @@ class UI:
         tty.set_raw()
 
         try:
-            election = self.wait_for_election()
+            choice = self.wait_for_choice()
         finally:
             tty.restore()
             rprint()
 
-        return self.paths[election]
+        return self.paths[choice]
 
-    def wait_for_election(self):
+    def wait_for_choice(self):
+        def single_match():
+            return not self.menu_open and len(self.paths) == 1
+
         while 1:
             self.process_pending()
 
             key = self.get_key()
             if key is None:
-                if not self.menu_open and len(self.paths) == 1:
+                if single_match():
+                    rprint('(single match)\n')
                     return 0
 
                 continue
 
-            election = self.key2election(key)
-            if self.is_valid_election(election):
-                logging.debug('election is %s', election)
-                return election
+            choice = self.key2choice(key)
+            if self.is_valid_choice(choice):
+                logging.debug('choice is %s', choice)
+                return choice
 
     def get_key(self):
         keypress = self.poll.poll(100)
@@ -433,8 +442,11 @@ class UI:
     def process_pending(self):
         try:
             while 1:
-                path, level = self.pool.output_queue.get(timeout=0.1)
-                self.process_match(path, level)
+                item = self.pool.output_queue.get(timeout=0.1)
+                if item is None:
+                    continue
+
+                self.process_match(*item)
 
         except Queue.Empty:
             pass
@@ -470,7 +482,7 @@ class UI:
 
             del path_list[:]
 
-    def key2election(self, key):
+    def key2choice(self, key):
         if key in [ESC, CTRL_C]:
             raise CancelException
 
@@ -479,8 +491,8 @@ class UI:
 
         return key - ord('a')
 
-    def is_valid_election(self, election):
-        return election in [None] + range(0, len(self.paths))
+    def is_valid_choice(self, choice):
+        return choice in [None] + range(0, len(self.paths))
 
     def process_match(self, path, level):
         logging.debug("path:%s level:%s" % (path, level))
@@ -519,7 +531,7 @@ class UI:
                     suffix = suffix)))
 
 
-def sleep(queue, t):
+def sleep(t):
     time.sleep(t)
 
 
@@ -538,10 +550,17 @@ class Worker(mp.Process):
 
     def run(self):
         for func, args in iter(self.tasks.get, STOP):
-            func(self.output, *args)
+            self.push(func(*args))
             self.tasks.task_done()
 
         self.tasks.task_done()
+
+    def push(self, source):
+        try:
+            for x in source:
+                self.output.put(x)
+        except TypeError:
+            self.output.put(source)
 
 
 class TaskQueue(mp_queues.JoinableQueue):
@@ -590,6 +609,7 @@ class ProcessPool(object):
 
         self.terminate()
 
+
 class Go2:
     def __init__(self):
         self.pool = ProcessPool()
@@ -604,20 +624,27 @@ class Go2:
 
         try:
             target = ui.run()
+            if target == os.getcwd():
+                raise NothingToDoException
+
             rprint("Changing to: {0}\n".format(high(target)))
             save_target(target)
             self.history.insert_and_save(target)
 
-            logging.debug("saved history %s", len(ui.paths))
+            logging.debug("Saved history %s", len(ui.paths))
             self.cache.insert_and_save(ui.paths)
 
         except CancelException:
-            print("Canceled by user")
+            print("(canceled by user)")
             retval = 1
 
         except NotMatchException:
-            print("Pattern does not match\r")
+            print("(pattern does not match)\r")
             retval = 1
+
+        except NothingToDoException:
+            print("(nothing to do)")
+            retval = 0
 
         self.pool.terminate()
         logging.debug('end')
@@ -635,10 +662,10 @@ class Go2:
         return history_paths
 
     def create_tasks(self):
-        self.pool.add_task(file_task, self.history)
-#        self.pool.sleep_free_workers(1)
+        self.pool.add_task(from_file_provider, self.history)
+        self.pool.sleep_free_workers(1)
 
-        self.pool.add_task(file_task, self.cache)
+        self.pool.add_task(from_file_provider, self.cache)
 
         paths = ListUniq()
         paths.extend([os.getcwd(), USERDIR])
@@ -648,7 +675,7 @@ class Go2:
             paths.append('/')
 
         for path in paths:
-            self.pool.add_task(tree_task, path)
+            self.pool.add_task(tree_provider, path)
 
 
 def create_directory_wizzard(path):
@@ -706,7 +733,9 @@ def chdir_decorator(wizzard=False):
     raise NotExistsException(target)
 
 
-def get_config(args):
+def get_config(args=None):
+    args = args or []
+
     parser = argparse.ArgumentParser(
         prog = 'go2',
         description = '''\

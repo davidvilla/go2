@@ -14,7 +14,7 @@ from fs.memoryfs import MemoryFS
 from pyDoubles.framework import *
 
 import go2
-from go2 import PathStore, file_task
+from go2 import PathStore, from_file_provider
 
 HOME = '/home/user'
 
@@ -82,7 +82,7 @@ class Test_PathStore(unittest.TestCase, StubFS):
         self.assertEquals(list(sut)[0], path)
 
 
-class Test_file_task(unittest.TestCase, StubFS):
+class Test_from_file_provider(unittest.TestCase, StubFS):
     def setUp(self):
         StubFS.setUp(self)
 
@@ -90,19 +90,17 @@ class Test_file_task(unittest.TestCase, StubFS):
         sut = self.PathStore_with_content('paths')
         go2.config.pattern = ['la']
 
-        spy = empty_spy()
-        file_task(spy, sut)
+        paths = list(from_file_provider(sut))
 
-        assert_that_was_called(spy.put).with_args(('/home/user/lab', 0))
+        self.assertIn(('/home/user/lab', 0), paths)
 
     def test_search_missing(self):
-        "file_task remove checked missing paths"
+        "from_file_provider remove checked missing paths"
         sut = self.PathStore_with_content('paths')
         go2.config.pattern = ['med']
 
-        spy = empty_spy()
-        file_task(spy.put, sut)
+        paths = list(from_file_provider(sut))
 
-        assert_that_method(spy.put).was_never_called()
+        self.assertFalse(paths)
 
 UnitTestCase()
