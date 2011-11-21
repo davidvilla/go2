@@ -30,7 +30,6 @@ except (OSError, ValueError):
 
 os.environ['LANG'] = 'C'
 
-import collections
 import pwd
 import Queue
 import tty
@@ -45,6 +44,7 @@ import multiprocessing.queues as mp_queues
 import subprocess as subp
 import shlex
 
+import gobject
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
@@ -83,6 +83,52 @@ logging.basicConfig(
     filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
+
+
+class FilteredObservable(object):
+    def __init__(self):
+        self.observers = []
+        self.filters = []
+
+    def register(self, ob):
+        self.observers.append(ob)
+
+    def add_filter(self, f):
+        self.filters.append(f)
+
+    def notify(self, item):
+        if any(f(item) for f in self.filters):
+            return
+
+        for ob in self.observers:
+            ob(item)
+
+
+class QueueReactor(gobject.MainLoop):
+
+    class QueueExtractor(object):
+        def __init__(self, queue, callback, *args):
+            self.queue = queue
+            self.callback = callback
+            self.args = args
+
+        def __call__(self, value):
+            print 'called'
+            self.callback(self.queue.get(), value, *self.args)
+
+    def queue_add_watch(self, queue, callback, *args):
+        gobject.io_add_watch(queue._reader.fileno(),
+                             gobject.IO_IN,
+                             QueueReactor.QueueExtractor(queue, callback, *args))
+
+    def process_pending(self):
+        context = self.get_context()
+
+        while context.pending():
+            context.iteration()
+
+    def run(self):
+        gobject.MainLoop.run(self)
 
 
 def go2setup(mode='r+'):

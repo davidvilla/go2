@@ -4,6 +4,7 @@
 import sys
 import os
 import time
+import multiprocessing as mp
 
 import unittest2 as unittest
 from fs.memoryfs import MemoryFS
@@ -33,61 +34,8 @@ class TestPool(unittest.TestCase):
         self.pool.join()
 
 
-class QueueReactor(object):
-    class QueueExtractor(object):
-        def __init__(self, queue, callback, *args):
-            self.queue = queue
-            self.callback = callback
-            self.args = args
-
-        def __call__(self):
-            self.callback(self.queue.get(), *self.args)
-
-    def add_queue_watch(self, queue, callback, *args):
-        gobject.io_add_watch(queue._reader.fileno(),
-                             gobject.IO_IN,
-                             QueueExtractor(queue, callback, *args))
-
-    def run(self):
-        gobject.MainLoop().run()
-
-
-class FilteredObserver(object):
-    def __init__(self, queue):
-        self.observers = []
-        self.filters = []
-
-    def notify(self, item):
-        if any(f(item) for f in self.filters):
-            return
-
-        for ob in self.observers:
-            ob(item)
-
-    def register(self, ob):
-        self.observer.append(ob)
-
-    def add_filter(self, f):
-        self.filters.append(f)
-
-
-ui = UI()
-path_list = PathList(ui.add_entry)
-
-ob = FilteredObserver()
-ob.add_filter(is_ignored)
-ob.register(path_list.add)
-
-queue = mp.Queue()
-
-r = QueueReactor()
-r.add_queue_watch(queue, ob.notify)
-r.add_io_watch(stdin, ui.on_key_pressed)
-r.run()
-
-
 class TestIgnore(unittest.TestCase):
-    def test_ignore_foo(self):
+    def atest_ignore_foo(self):
         go2.config = go2.get_config()
         go2.config.ignore = ['foo']
 
@@ -95,3 +43,51 @@ class TestIgnore(unittest.TestCase):
 
         reactor.add(path_ob)
         reactor.run()
+
+
+class Test_FilteredObserver(unittest.TestCase):
+    def observable_with_observer(self):
+        self.ob = empty_mock()
+        self.sut = go2.FilteredObservable()
+        self.sut.register(self.ob.update)
+
+    def test_update(self):
+        self.observable_with_observer()
+        expect_call(self.ob.update).with_args('foo')
+
+        self.sut.notify('foo')
+
+        self.ob.assert_expectations()
+
+    def test_filter(self):
+
+        def foo_filter(value):
+            return value == 'foo'
+
+        self.observable_with_observer()
+        expect_call(self.ob.update).with_args('bar')
+        self.sut.add_filter(foo_filter)
+
+        self.sut.notify('foo')
+        self.sut.notify('bar')
+
+        self.ob.assert_that_is_satisfied()
+
+
+class Test_QueueReactor(unittest.TestCase):
+    def test_put(self):
+        # given:
+        ob = empty_mock()
+        expect_call(ob.update)
+
+        queue = mp.Queue()
+        queue.put('foo')
+
+        sut = go2.QueueReactor()
+        sut.queue_add_watch(queue, ob.update)
+
+        # when
+        sut.process_pending()
+
+        # then
+        ob.assert_that_is_satisfied()
