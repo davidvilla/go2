@@ -85,50 +85,79 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 
-class FilteredObservable(object):
-    def __init__(self):
-        self.observers = []
-        self.filters = []
-
-    def register(self, ob):
-        self.observers.append(ob)
-
-    def add_filter(self, f):
-        self.filters.append(f)
-
-    def notify(self, item):
-        if any(f(item) for f in self.filters):
-            return
-
-        for ob in self.observers:
-            ob(item)
+# class FilteredObservable(object):
+#     def __init__(self):
+#         self.observers = []
+#         self.filters = []
+#
+#     def register(self, ob):
+#         self.observers.append(ob)
+#
+#     def add_filter(self, f):
+#         self.filters.append(f)
+#
+#     def notify(self, item):
+#         if any(f(item) for f in self.filters):
+#             return
+#
+#         for ob in self.observers:
+#             ob(item)
 
 
 class QueueReactor(gobject.MainLoop):
 
-    class QueueExtractor(object):
-        def __init__(self, queue, callback, *args):
-            self.queue = queue
-            self.callback = callback
-            self.args = args
-
-        def __call__(self, value):
-            print 'called'
-            self.callback(self.queue.get(), value, *self.args)
+    def __init__(self):
+        gobject.MainLoop.__init__(self)
+        self.context = self.get_context()
 
     def queue_add_watch(self, queue, callback, *args):
-        gobject.io_add_watch(queue._reader.fileno(),
+        gobject.io_add_watch(queue._reader,
                              gobject.IO_IN,
-                             QueueReactor.QueueExtractor(queue, callback, *args))
+                             callback,  queue, *args)
 
     def process_pending(self):
-        context = self.get_context()
+        time.sleep(0.1)
 
-        while context.pending():
-            context.iteration()
+        while self.context.pending():
+            self.context.iteration()
+
+    def iteration(self):
+        self.context.iteration()
 
     def run(self):
+        time.sleep(0.1)
         gobject.MainLoop.run(self)
+
+
+class PathStorage(object):
+    def __init__(self, menu):
+        self.menu = menu
+        self.group = [list() for x in range(4)]
+        self.filters = []
+
+    def add(self, path, level):
+        if path in self.group[level]:
+            return
+
+        if any(f(path) for f in self.filters):
+            return
+
+        self.group[level].append(path)
+
+        if level == 0:
+            self.menu.add_entry(path)
+
+    def add_filter(self, f):
+        self.filters.append(f)
+
+    def flush_alternate(self):
+        for level in range(1, 4):
+            if not self.group[level]:
+                continue
+
+            self.menu.add_separator()
+            for path in self.group[level]:
+                self.menu.add_entry(path)
 
 
 def go2setup(mode='r+'):
@@ -248,26 +277,25 @@ class PathStore:
 #        self.log = logging.getLogger('PathStore [%s]' % os.path.split(path)[-1])
 
     def load(self):
-
-        def load_file_lines(fd):
-            for line in fd:
-                line = line.strip()
-                if not line:
-                    continue
-
-                try:
-                    visits, path = line.split(':', 1)
-                except ValueError:
-                    visits, path = 1, line
-
-                self.data[path.strip()] = int(visits)
-
         try:
             with config.fs.open(self.path) as fd:
-                load_file_lines(fd)
+                self._load_file_lines(fd)
 
         except ResourceNotFoundError:
             pass
+
+    def _load_file_lines(self, fd):
+        for line in fd:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                visits, path = line.split(':', 1)
+            except ValueError:
+                visits, path = 1, line
+
+            self.data[path.strip()] = int(visits)
 
     def __iter__(self):
         def _cmp(p1, p2):

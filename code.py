@@ -21,31 +21,9 @@ class QueueReactor(object):
         gobject.MainLoop().run()
 
 
-class FilteredObserver(object):
-    def __init__(self, queue):
-        self.observers = []
-        self.filters = []
-
-    def notify(self, item):
-        if any(f(item) for f in self.filters):
-            return
-
-        for ob in self.observers:
-            ob(item)
-
-    def register(self, ob):
-        self.observer.append(ob)
-
-    def add_filter(self, f):
-        self.filters.append(f)
-
 
 ui = UI()
 path_list = PathList(ui.add_entry)
-
-ob = FilteredObserver()
-ob.add_filter(is_ignored)
-ob.register(path_list.add)
 
 queue = mp.Queue()
 
