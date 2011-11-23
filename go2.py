@@ -105,7 +105,6 @@ logging.basicConfig(
 
 
 class QueueReactor(gobject.MainLoop):
-
     def __init__(self):
         gobject.MainLoop.__init__(self)
         self.context = self.get_context()
@@ -113,20 +112,47 @@ class QueueReactor(gobject.MainLoop):
     def queue_add_watch(self, queue, callback, *args):
         gobject.io_add_watch(queue._reader,
                              gobject.IO_IN,
-                             callback,  queue, *args)
+                             callback,  queue, *args,
+                             priority=gobject.PRIORITY_HIGH)
+
+    def io_add_watch(self, fd, callback, *args):
+        gobject.io_add_watch(fd, gobject.IO_IN, callback, *args)
+
+    def timeout_add(self, t, callback, *args):
+        gobject.timeout_add(t, callback, *args)
 
     def process_pending(self):
         time.sleep(0.1)
-
         while self.context.pending():
             self.context.iteration()
 
     def iteration(self):
+        time.sleep(0.1)
         self.context.iteration()
 
     def run(self):
         time.sleep(0.1)
         gobject.MainLoop.run(self)
+
+
+class QueueExtractor(object):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def __call__(self, fd, condition, queue, *args):
+        event = queue.get()
+        print event
+        self.callback(*event)
+        return True
+
+
+# class QuitHandler(object):
+#     def __init__(self, reactor):
+#         self.reactor = reactor
+#
+#     def __call__(self, key):
+#         if ord(key) in [ESC, CTRL_C]:
+#             self.reactor.quit()
 
 
 class PathStorage(object):
@@ -158,6 +184,66 @@ class PathStorage(object):
             self.menu.add_separator()
             for path in self.group[level]:
                 self.menu.add_entry(path)
+
+
+class Menu(object):
+
+    class FullException(Exception):
+        pass
+
+    def __init__(self, reactor, out, max_size=26):
+        self.reactor = reactor
+        self.fd = out
+        self.max_size = max_size
+        self.entries = []
+        self._is_full = False
+        self.choice = None
+
+    def is_full(self):
+        return self._is_full
+
+    def input_handler(self, fd, condition=None):
+        key = fd.read(1)
+#        key = os.read(fd, 1)
+        print key
+        choice = self.key2choice(ord(key))
+        print choice, self.entries
+        if self.is_valid_choice(choice):
+            self.choice = choice
+            self.reactor.quit()
+
+        return True
+
+    def key2choice(self, key):
+        if key in [ESC, CTRL_C]:
+            self.reactor.quit()
+
+        if key == ENTER:
+            return 0
+
+        return key - ord('a')
+
+    def is_valid_choice(self, choice):
+        return choice in range(0, len(self.entries))
+
+    def add_entry(self, entry):
+        if len(self.entries) >= self.max_size:
+            self._is_full = True
+            self.fd.write("Warning: Too many matches!\r\n")
+            raise self.FullException
+
+        self.entries.append(entry)
+        self.write_last()
+
+    def write_last(self):
+        suffix = ''
+        if len(self.entries) == 1:
+            suffix += ' [ENTER]'
+
+        self.fd.write('{0:c}: {1}{2}'.format(
+                len(self.entries) + ord('a') - 1,
+                self.entries[-1],
+                suffix))
 
 
 def go2setup(mode='r+'):

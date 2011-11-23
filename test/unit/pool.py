@@ -38,17 +38,6 @@ class TestPool(unittest.TestCase):
         self.pool.join()
 
 
-# class TestIgnore(unittest.TestCase):
-#     def atest_ignore_foo(self):
-#         go2.config = go2.get_config()
-#         go2.config.ignore = ['foo']
-#
-#         path_ob = PathObserver()
-#
-#         reactor.add(path_ob)
-#         reactor.run()
-
-
 # class Test_FilteredObserver(unittest.TestCase):
 #     def observable_with_observer(self):
 #         self.ob = empty_mock()
@@ -93,7 +82,6 @@ class Test_QueueReactor(unittest.TestCase):
         self.sut.queue_add_watch(queue, handler.handle)
 
         # when
-        time.sleep(0.1)
         self.sut.process_pending()
 
         # then
@@ -186,27 +174,111 @@ class Test_PathStorage(unittest.TestCase):
         menu.assert_that_is_satisfied()
 
 
+# class Test_quit_handler(unittest.TestCase):
+#     def test_any_key(self):
+#         # given
+#         reactor = empty_mock()
+#         expect_call(reactor.quit)
+#         sut = go2.QuitHandler(reactor)
+#
+#         # when
+#         sut(chr(go2.CTRL_C))
+#
+#         # then
+#         reactor.assert_that_is_satisfied()
+
+
 class Test_Menu(unittest.TestCase):
-    pass
+    def setUp(self):
+        self.reactor_spy = empty_spy()
+        self.fd_stub = empty_stub()
 
-# providers -> queue -> QueueReactor -> PathStorage.add   -> menu.add_entry
-#                                       PathStorage.flush -> menu.add_entry
-#              key   ->      Reactor ->                   -> menu.keypress
+    def new_menu(self, **kargs):
+        params = dict(reactor=self.reactor_spy, out=self.fd_stub)
+        params.update(kargs)
+        return go2.Menu(**params)
 
+    def input_stub(self, key):
+        retval = empty_stub()
+        when(retval.read).then_return(key)
+        return retval
 
-class Test_Menu(unittest.TestCase):
-    def FIXME_test_choice(self):
+    def test_add_entry(self):
+        sut = self.new_menu()
+
+        sut.add_entry('foo')
+
+        self.assertIn('foo', sut.entries)
+
+    def test_FullException(self):
         # given
-        queue = mp.Queue()
-        reactor = QueueReactor()
-        menu = go2.Menu(reactor)
+        sut = self.new_menu(max_size=1)
 
-        path_storage = go2.PathStorage(menu)
-        path_storage.add_filter(foo_filter)
+        # when/then
+        sut.add_entry('foo')
+        with self.assertRaises(go2.Menu.FullException):
+            sut.add_entry('bar')
 
-        reactor.io_add_watch(menu.fd, menu.keypressed)
-        reactor.queue_add_watch(queue,
-                                go2.QueueExtractor(queue, path_storage.add))
-        reactor.run()
+        self.assert_(sut.is_full())
 
-        path_storage.flush_alternate()
+    def test_print_ENTER_for_first(self):
+        # given
+        fd = empty_mock()
+        expect_call(fd.write).with_args('a: foo [ENTER]')
+        sut = self.new_menu(out=fd)
+
+        # when
+        sut.add_entry('foo')
+
+        # then
+        fd.assert_that_is_satisfied()
+
+    def test_print_second(self):
+         # given
+        fd = empty_mock()
+        expect_call(fd.write).with_args(ANY_ARG)
+        expect_call(fd.write).with_args('b: bar')
+        sut = self.new_menu(out=fd)
+
+        # when
+        sut.add_entry('foo')
+        sut.add_entry('bar')
+
+        # then
+        fd.assert_that_is_satisfied()
+
+    def test_valid_key(self):
+        # given
+        sut = self.new_menu()
+        sut.add_entry('foo')
+        fd = self.input_stub('a')
+
+        # when
+        sut.input_handler(fd)
+
+        # then
+        self.assertEquals(sut.choice, 0)
+        assert_that_was_called(self.reactor_spy.quit)
+
+    def test_wrong_key_is_ignored(self):
+        # given
+        sut = self.new_menu()
+        sut.add_entry('foo')
+        fd = self.input_stub('b')
+
+        # when
+        sut.input_handler(fd)
+
+        # then
+        self.assertEquals(sut.choice, None)
+
+    def test_CTRL_C_quit_reactor(self):
+       # given
+        sut = self.new_menu()
+        fd = self.input_stub(chr(go2.CTRL_C))
+
+        # when
+        sut.input_handler(fd)
+
+        # then
+        assert_that_was_called(self.reactor_spy.quit)
