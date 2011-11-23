@@ -14,7 +14,7 @@ from fs.memoryfs import MemoryFS
 from pyDoubles.framework import *
 
 import go2
-from go2 import PathStore, from_file_provider
+from go2 import PathFileStore, from_file_provider
 
 HOME = '/home/user'
 
@@ -30,26 +30,26 @@ class StubFS(object):
     def mkdir(self, relpath):
         self.fs.makedir(fs.join(HOME, relpath), recursive=True)
 
-    def PathStore_with_content(self, fpath, more=''):
+    def PathFileStore_with_content(self, fpath, more=''):
         self.fs.createfile(fpath, '''\
 1: /home/user/lab
 2: /home/user/lab/media
 ''' + more)
-        return PathStore(fpath)
+        return PathFileStore(fpath)
 
 
-class Test_PathStore(unittest.TestCase, StubFS):
+class Test_PathFileStore(unittest.TestCase, StubFS):
     def setUp(self):
         StubFS.setUp(self)
 
     def test_load_ok(self):
-        sut = self.PathStore_with_content(fpath='paths')
+        sut = self.PathFileStore_with_content(fpath='paths')
         self.assertEquals(set(sut.data.keys()),
                           set(['/home/user/lab',
                                '/home/user/lab/media']))
 
     def test_load_missing(self):
-        sut = PathStore('missing')
+        sut = PathFileStore('missing')
         self.assertEquals(sut.data, {})
 
     def assert_visits(self, store_path, path, visits):
@@ -57,7 +57,7 @@ class Test_PathStore(unittest.TestCase, StubFS):
                       self.fs.getcontents(store_path))
 
     def store_create_and_insert(self, store_path, path, size=None, visits=None):
-        sut = self.PathStore_with_content(store_path)
+        sut = self.PathFileStore_with_content(store_path)
         sut.insert_and_save(path)
         if size:
             self.assertEquals(len(sut.data), size)
@@ -87,7 +87,7 @@ class Test_from_file_provider(unittest.TestCase, StubFS):
         StubFS.setUp(self)
 
     def test_search_existing(self):
-        sut = self.PathStore_with_content('paths')
+        sut = self.PathFileStore_with_content('paths')
         go2.config.pattern = ['la']
 
         paths = list(from_file_provider(sut))
@@ -96,7 +96,7 @@ class Test_from_file_provider(unittest.TestCase, StubFS):
 
     def test_search_missing(self):
         "from_file_provider remove checked missing paths"
-        sut = self.PathStore_with_content('paths')
+        sut = self.PathFileStore_with_content('paths')
         go2.config.pattern = ['med']
 
         paths = list(from_file_provider(sut))

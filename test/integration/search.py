@@ -52,3 +52,20 @@ class Test_Search(unittest.TestCase):
         self.assertEquals(menu.entries, ['bar'])
         assert_that_was_called(out.write).with_args('a: bar [ENTER]')
         self.assertEquals(menu.choice, 0)
+
+
+# given: un pool con tareas
+# when:  el pool queda ocioso
+# then:  el reactor acaba
+
+# given: menu con una sola entrada
+# when:  todas las tareas han terminado
+# then:  elegir la única entrada sin preguntar
+
+# given: un reactor
+# when:  el reactor acaba
+# then:  enviar las rutas alternativas al menú
+
+# given: un reactor y un menú
+# when:  el menú se llena
+# then:  el reactor acaba

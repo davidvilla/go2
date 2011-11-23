@@ -85,25 +85,6 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 
-# class FilteredObservable(object):
-#     def __init__(self):
-#         self.observers = []
-#         self.filters = []
-#
-#     def register(self, ob):
-#         self.observers.append(ob)
-#
-#     def add_filter(self, f):
-#         self.filters.append(f)
-#
-#     def notify(self, item):
-#         if any(f(item) for f in self.filters):
-#             return
-#
-#         for ob in self.observers:
-#             ob(item)
-
-
 class QueueReactor(gobject.MainLoop):
     def __init__(self):
         gobject.MainLoop.__init__(self)
@@ -170,7 +151,7 @@ class PathStorage(object):
 
         self.group[level].append(path)
 
-        if level == 0:
+        if level == MatchLevel.START:
             self.menu.add_entry(path)
 
     def add_filter(self, f):
@@ -228,12 +209,14 @@ class Menu(object):
 
     def add_entry(self, entry):
         if len(self.entries) >= self.max_size:
+            self.reactor.quit()
             self._is_full = True
-            self.fd.write("Warning: Too many matches!\r\n")
+#            self.fd.write("Warning: Too many matches!\r\n")
             raise self.FullException
 
         self.entries.append(entry)
         self.write_last()
+#        self.fd.write('Searching...')
 
     def write_last(self):
         suffix = ''
@@ -352,7 +335,7 @@ def save_target(path):
     config.fs.setcontents(GO2TMP, path)
 
 
-class PathStore:
+class PathFileStore:
     "Manage a file holding a path set"
 
     def __init__(self, path, size=1000):
@@ -360,7 +343,7 @@ class PathStore:
         self.size = size
         self.data = {}
         self.load()
-#        self.log = logging.getLogger('PathStore [%s]' % os.path.split(path)[-1])
+#        self.log = logging.getLogger('PathFileStore [%s]' % os.path.split(path)[-1])
 
     def load(self):
         try:
@@ -414,11 +397,11 @@ class PathStore:
         self.save()
 
     def __unicode__(self):
-        return "<PathStore {0}>".format(self.path)
+        return "<PathFileStore {0}>".format(self.path)
 
 
 def save_in_history(path):
-    PathStore(GO2HISTORY).insert_and_save(path)
+    PathFileStore(GO2HISTORY).insert_and_save(path)
 
 
 def from_file_provider(path_store):
@@ -776,8 +759,8 @@ class Go2:
 
     def main(self):
         retval = 0
-        self.history = PathStore(GO2HISTORY)
-        self.cache = PathStore(GO2CACHE)
+        self.history = PathFileStore(GO2HISTORY)
+        self.cache = PathFileStore(GO2CACHE)
 
         self.create_tasks()
         ui = UI(self.pool)

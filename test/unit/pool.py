@@ -282,3 +282,6 @@ class Test_Menu(unittest.TestCase):
 
         # then
         assert_that_was_called(self.reactor_spy.quit)
+
+    def FIXME_test_separators(self):
+        pass
