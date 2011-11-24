@@ -78,6 +78,7 @@ CD_MODE_CMD = "alias cd='go2 --cd'"
 
 STOP = 'STOP'
 
+
 logging.basicConfig(
     filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
     filemode='w',
