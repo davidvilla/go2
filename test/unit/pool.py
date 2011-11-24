@@ -97,6 +97,32 @@ class Test_QueueReactor(unittest.TestCase):
         # then
         # reach this
 
+    def test_quit_on_conditiion(self):
+        def quit(reactor):
+            reactor.quit()
+
+        # given
+        gobject.timeout_add(1, quit, self.sut)
+
+        # when
+        self.sut.run()
+
+        # then
+        # reach this
+
+    def test_exception_break_reactor(self):
+        def raise_exception():
+            raise go2.CancelException()
+
+        # given
+        self.sut.timeout_add(1, raise_exception)
+
+        # when
+        self.sut.run()
+
+        # then
+        # reach this
+
 
 class Test_PathStorage(unittest.TestCase):
     def setUp(self):
@@ -272,16 +298,17 @@ class Test_Menu(unittest.TestCase):
         # then
         self.assertEquals(sut.choice, None)
 
-    def test_CTRL_C_quit_reactor(self):
+    def test_ESC_quit_reactor(self):
        # given
         sut = self.new_menu()
-        fd = self.input_stub(chr(go2.CTRL_C))
+        fd = self.input_stub(chr(go2.ESC))
 
-        # when
-        sut.input_handler(fd)
+        # when/then
+        with self.assertRaises(go2.CancelException):
+            sut.input_handler(fd)
 
         # then
-        assert_that_was_called(self.reactor_spy.quit)
+#        assert_that_was_called(self.reactor_spy.quit)
 
     def FIXME_test_separators(self):
         pass

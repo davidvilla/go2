@@ -86,21 +86,35 @@ logging.basicConfig(
 
 
 class QueueReactor(gobject.MainLoop):
+    class Callback(object):
+        def __init__(self, reactor, func):
+            self.reactor = reactor
+            self.func = func
+
+        def __call__(self, *args):
+            try:
+                return self.func(*args)
+            except Exception, e:
+                print('{0!r}: {1}'.format(self.reactor, e))
+                self.reactor.quit()
+
     def __init__(self):
         gobject.MainLoop.__init__(self)
         self.context = self.get_context()
 
-    def queue_add_watch(self, queue, callback, *args):
-        gobject.io_add_watch(queue._reader,
-                             gobject.IO_IN,
-                             callback,  queue, *args,
-                             priority=gobject.PRIORITY_HIGH)
+    def queue_add_watch(self, queue, func, *args):
+        gobject.io_add_watch(
+            queue._reader, gobject.IO_IN,
+            self.Callback(self, func), queue, *args,
+            priority=gobject.PRIORITY_HIGH)
 
-    def io_add_watch(self, fd, callback, *args):
-        gobject.io_add_watch(fd, gobject.IO_IN, callback, *args)
+    def io_add_watch(self, fd, func, *args):
+        gobject.io_add_watch(
+            fd, gobject.IO_IN,
+            self.Callback(self, func), *args)
 
-    def timeout_add(self, t, callback, *args):
-        gobject.timeout_add(t, callback, *args)
+    def timeout_add(self, t, func, *args):
+        gobject.timeout_add(t, self.Callback(self, func), *args)
 
     def process_pending(self):
         time.sleep(0.1)
@@ -184,10 +198,14 @@ class Menu(object):
         return self._is_full
 
     def input_handler(self, fd, condition=None):
-        key = fd.read(1)
+        key = ord(fd.read(1))
 #        key = os.read(fd, 1)
         print key
-        choice = self.key2choice(ord(key))
+
+        if key in [ESC, CTRL_C]:
+            raise CancelException
+
+        choice = self.key2choice(key)
         print choice, self.entries
         if self.is_valid_choice(choice):
             self.choice = choice
@@ -196,9 +214,6 @@ class Menu(object):
         return True
 
     def key2choice(self, key):
-        if key in [ESC, CTRL_C]:
-            self.reactor.quit()
-
         if key == ENTER:
             return 0
 
@@ -227,6 +242,45 @@ class Menu(object):
                 len(self.entries) + ord('a') - 1,
                 self.entries[-1],
                 suffix))
+
+
+# class QueueReaderThread(Thread):
+#     STOP = '<STOP>'
+#
+#     def __init__(self, queue, sink):
+#         self.queue = queue
+#         self.sink = sink
+#         Thread.__init__(self)
+#
+#     def quit(self):
+#         self.queue.put(self.STOP)
+#
+#     def run(self):
+#         while 1:
+#             item = self.queue.get()
+#             if item == self.STOP:
+#                 break
+#
+#             self.sink(item)
+#
+#
+# class KeyReaderThread(Thread):
+#     def __init__(self, fd, sink):
+#         self.fd = fd
+#         self.sink = sink
+#         self.active = Event()
+#         Thread.__init__(self)
+#
+#     def quit(self):
+#         self.active.set()
+#
+#     def run(self):
+#         while self.active.is_set():
+#             key = self.fd.read(1)
+#             if key in [ESC, CTRL_C]:
+#                 raise CancelException
+#
+#             self.sink(key)
 
 
 def go2setup(mode='r+'):
@@ -504,19 +558,24 @@ def tree_provider(root):
     return CommandProvider('tree -dfin --noreport %s' % root)
 
 
-class CancelException(Exception):
+class Go2Exception(Exception):
+    def __str__(self):
+        return repr(self)
+
+
+class CancelException(Go2Exception):
     pass
 
 
-class NotMatchException(Exception):
+class NotMatchException(Go2Exception):
     pass
 
 
-class NotExistsException(Exception):
+class NotExistsException(Go2Exception):
     pass
 
 
-class NothingToDoException(Exception):
+class NothingToDoException(Go2Exception):
     pass
 
 
