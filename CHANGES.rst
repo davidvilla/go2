@@ -1,7 +1,14 @@
+Release 1.20111028
+------------------
+
+* Refactoring: QueueReactor, PathBuffer, Menu
+
+
 Release 1.20111011
 ------------------
 
 * single match fixed.
+
 
 Release 1.20111009
 ------------------

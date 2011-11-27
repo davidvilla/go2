@@ -31,9 +31,7 @@ except (OSError, ValueError):
 os.environ['LANG'] = 'C'
 
 import pwd
-import Queue
 import tty
-import select
 import termios
 import time
 import signal
@@ -93,211 +91,6 @@ class Go2Exception(Exception):
         return repr(self)
 
 
-class QueueReactor(gobject.MainLoop):
-    class Callback(object):
-        def __init__(self, reactor, func):
-            self.reactor = reactor
-            self.func = func
-
-        def __call__(self, *args):
-            try:
-                return self.func(*args)
-            except Exception, e:
-#                print_exc()
-                logging.warning('{0!r}: {1}'.format(self.reactor, e))
-                self.reactor.exception = e
-                self.reactor.quit()
-                return False
-
-    def __init__(self):
-        gobject.MainLoop.__init__(self)
-        self.context = self.get_context()
-        self.at_quit_func = lambda: None
-        self.exception = None
-
-    def queue_add_watch(self, queue, func, *args):
-        gobject.io_add_watch(
-            queue._reader, gobject.IO_IN,
-            self.Callback(self, func), queue, *args,
-            priority=gobject.PRIORITY_HIGH)
-
-    def io_add_watch(self, fd, func, *args):
-        gobject.io_add_watch(
-            fd, gobject.IO_IN,
-            self.Callback(self, func), *args)
-
-    def timeout_add(self, t, func, *args):
-        gobject.timeout_add(t, self.Callback(self, func), *args)
-
-    def at_quit(self, func):
-        self.at_quit_func = func
-
-    def process_pending(self):
-        time.sleep(0.1)
-        while self.context.pending():
-            self.context.iteration()
-
-    def iteration(self):
-        time.sleep(0.1)
-        self.context.iteration()
-
-    def run(self):
-        time.sleep(0.1)
-        gobject.MainLoop.run(self)
-        self.at_quit_func()
-        if self.exception is not None:
-            raise self.exception
-
-    def quit(self):
-        logging.debug('reactor quit')
-        gobject.MainLoop.quit(self)
-
-
-class QueueExtractor(object):
-    def __init__(self, callback):
-        self.callback = callback
-
-    def __call__(self, fd, condition, queue, *args):
-        event = queue.get()
-#        logging.debug('queue.get() -> %s' % str(event))
-
-        self.callback(event)
-        return True
-
-
-class PathBuffer(object):
-    def __init__(self, menu):
-        self.menu = menu
-        self.groups = [list() for x in range(4)]
-        self.filters = []
-
-    def add(self, item):
-        if item is None:
-            return True
-
-        path, level = item
-
-        try:
-            self._tryTo_add(path, level)
-        except Menu.FullMenuException:
-            return False
-
-        return True
-
-    def _tryTo_add(self, path, level):
-        if path in self.groups[level] or \
-           any(f(path) for f in self.filters):
-            return
-
-        self.groups[level].append(path)
-
-        if level == MatchLevel.START:
-            self.menu.add_entry(path)
-
-    def add_filter(self, f):
-        self.filters.append(f)
-
-    def flush_alternate(self):
-
-        def add_paths_of_group(group):
-            try:
-                for path in group:
-                    self.menu.add_entry(path)
-            except Menu.FullMenuException:
-                return
-
-        for level in range(1, 4):
-            if not self.groups[level]:
-                continue
-
-            self.menu.add_separator()
-            add_paths_of_group(self.groups[level])
-
-
-class Menu(object):
-
-    class InvalidChoiceException(Go2Exception):
-        pass
-
-    class FullMenuException(Go2Exception):
-        pass
-
-    def __init__(self, reactor, out, max_size=26):
-        self.reactor = reactor
-        self.fd = out
-        self.max_size = max_size
-        self.entries = []
-        self.is_full = False
-        self.target = None
-        self.formatter = self.default_format
-
-    def input_handler(self, fd, condition=None):
-        key = ord(fd.read(1))
-#        key = os.read(fd, 1)
-#        print key
-
-        if key in [ESC, CTRL_C]:
-            raise CancelException
-
-        try:
-            choice = self.key2choice(key)
-            logging.debug("choice: {0}, entries: {1}".format(
-                    choice, self.entries))
-        except self.InvalidChoiceException:
-            return True
-
-        self.perform_choice(choice)
-        return False
-
-    def key2choice(self, key):
-        if key == ENTER:
-            return 0
-
-        choice = key - ord('a')
-
-        if not self.is_valid_choice(choice):
-            raise self.InvalidChoiceException()
-
-        return choice
-
-    def is_valid_choice(self, choice):
-        return choice in range(0, len(self.entries))
-
-    def perform_choice(self, choice):
-        self.target = self.entries[choice]
-        self.reactor.quit()
-
-    def add_separator(self):
-        self.out_write('\r   ~~~        \n')
-
-    def add_entry(self, entry):
-        if len(self.entries) >= self.max_size:
-            self.is_full = True
-            raise self.FullMenuException
-
-        self.entries.append(entry)
-        self.write_last()
-
-    def write_last(self):
-        suffix = ''
-        if len(self.entries) == 1:
-            suffix += ' [ENTER]'
-
-        line = self.formatter(
-            len(self.entries) + ord('a') - 1,
-            self.entries[-1],
-            suffix)
-
-        self.out_write(line)
-
-    def default_format(self, index, path, suffix):
-        return '{0:c}: {1}'.format(index, path)
-
-    def out_write(self, text):
-        self.fd.write(text)
-        self.fd.flush()
-
-
 def go2setup(mode='r+'):
     try:
         if ACTIVATION_CMD in config.fs.getcontents(os.path.join(USERDIR, '.bashrc')):
@@ -319,18 +112,6 @@ def rprint(cad=''):
 
 def high(text):
     return config.before + text + config.after
-
-
-class ListUniq(list):
-    def append(self, item):
-        if item in self:
-            return
-
-        list.append(self, item)
-
-    def extend(self, other):
-        for item in other:
-            self.append(item)
 
 
 def high_pattern(pattern, path):
@@ -355,6 +136,18 @@ def format_path(index, path, suffix):
     return '\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
 
 
+class ListUniq(list):
+    def append(self, item):
+        if item in self:
+            return
+
+        list.append(self, item)
+
+    def extend(self, other):
+        for item in other:
+            self.append(item)
+
+
 class MatchLevel:
     NO_MATCH = -1
     START = 0
@@ -372,23 +165,6 @@ def pattern2re_contain(pattern):
 
 
 def match(path):
-#    if False and len(config.pattern) == 1:
-#        pattern = config.pattern[0]
-#        basename = os.path.basename(path)
-#        if re.match(pattern, basename):
-#            return MatchLevel.START
-#
-#        if re.match(pattern, basename, re.IGNORECASE):
-#            return MatchLevel.START_IGNORECASE
-#
-#        if re.search(pattern, basename):
-#            return MatchLevel.CONTAIN
-#
-#        if re.search(pattern, basename, re.IGNORECASE):
-#            return MatchLevel.CONTAIN_IGNORECASE
-#
-#        return MatchLevel.NO_MATCH
-
     re_str = pattern2re_start(config.pattern)
     if re.match(re_str, path):
         return MatchLevel.START
@@ -898,6 +674,211 @@ class ProcessPool(object):
 #            self.pool.add_task(tree_provider, path)
 
 
+class QueueExtractor(object):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def __call__(self, fd, condition, queue, *args):
+        event = queue.get()
+#        logging.debug('queue.get() -> %s' % str(event))
+
+        self.callback(event)
+        return True
+
+
+class QueueReactor(gobject.MainLoop):
+    class Callback(object):
+        def __init__(self, reactor, func):
+            self.reactor = reactor
+            self.func = func
+
+        def __call__(self, *args):
+            try:
+                return self.func(*args)
+            except Exception, e:
+#                print_exc()
+                logging.warning('{0!r}: {1}'.format(self.reactor, e))
+                self.reactor.exception = e
+                self.reactor.quit()
+                return False
+
+    def __init__(self):
+        gobject.MainLoop.__init__(self)
+        self.context = self.get_context()
+        self.at_quit_func = lambda: None
+        self.exception = None
+
+    def queue_add_watch(self, queue, func, *args):
+        gobject.io_add_watch(
+            queue._reader, gobject.IO_IN,
+            self.Callback(self, func), queue, *args,
+            priority=gobject.PRIORITY_HIGH)
+
+    def io_add_watch(self, fd, func, *args):
+        gobject.io_add_watch(
+            fd, gobject.IO_IN,
+            self.Callback(self, func), *args)
+
+    def timeout_add(self, t, func, *args):
+        gobject.timeout_add(t, self.Callback(self, func), *args)
+
+    def at_quit(self, func):
+        self.at_quit_func = func
+
+    def process_pending(self):
+        time.sleep(0.1)
+        while self.context.pending():
+            self.context.iteration()
+
+    def iteration(self):
+        time.sleep(0.1)
+        self.context.iteration()
+
+    def run(self):
+        time.sleep(0.1)
+        gobject.MainLoop.run(self)
+        self.at_quit_func()
+        if self.exception is not None:
+            raise self.exception
+
+    def quit(self):
+        logging.debug('reactor quit')
+        gobject.MainLoop.quit(self)
+
+
+class PathBuffer(object):
+    def __init__(self, menu):
+        self.menu = menu
+        self.groups = [list() for x in range(4)]
+        self.filters = []
+
+    def add(self, item):
+        if item is None:
+            return True
+
+        path, level = item
+
+        try:
+            self._tryTo_add(path, level)
+        except Menu.FullMenuException:
+            return False
+
+        return True
+
+    def _tryTo_add(self, path, level):
+        if path in self.groups[level] or \
+           any(f(path) for f in self.filters):
+            return
+
+        self.groups[level].append(path)
+
+        if level == MatchLevel.START:
+            self.menu.add_entry(path)
+
+    def add_filter(self, f):
+        self.filters.append(f)
+
+    def flush_alternate(self):
+
+        def add_paths_of_group(group):
+            try:
+                for path in group:
+                    self.menu.add_entry(path)
+            except Menu.FullMenuException:
+                return
+
+        for level in range(1, 4):
+            if not self.groups[level]:
+                continue
+
+            self.menu.add_separator()
+            add_paths_of_group(self.groups[level])
+
+
+class Menu(object):
+
+    class InvalidChoiceException(Go2Exception):
+        pass
+
+    class FullMenuException(Go2Exception):
+        pass
+
+    def __init__(self, reactor, out, max_size=26):
+        self.reactor = reactor
+        self.fd = out
+        self.max_size = max_size
+        self.entries = []
+        self.is_full = False
+        self.target = None
+        self.formatter = self.default_format
+
+    def input_handler(self, fd, condition=None):
+        key = ord(fd.read(1))
+#        key = os.read(fd, 1)
+#        print key
+
+        if key in [ESC, CTRL_C]:
+            raise CancelException
+
+        try:
+            choice = self.key2choice(key)
+            logging.debug("choice: {0}, entries: {1}".format(
+                    choice, self.entries))
+        except self.InvalidChoiceException:
+            return True
+
+        self.perform_choice(choice)
+        return False
+
+    def key2choice(self, key):
+        if key == ENTER:
+            return 0
+
+        choice = key - ord('a')
+
+        if not self.is_valid_choice(choice):
+            raise self.InvalidChoiceException()
+
+        return choice
+
+    def is_valid_choice(self, choice):
+        return choice in range(0, len(self.entries))
+
+    def perform_choice(self, choice):
+        self.target = self.entries[choice]
+        self.reactor.quit()
+
+    def add_separator(self):
+        self.out_write('\r   ~~~        \n')
+
+    def add_entry(self, entry):
+        if len(self.entries) >= self.max_size:
+            self.is_full = True
+            raise self.FullMenuException
+
+        self.entries.append(entry)
+        self.write_last()
+
+    def write_last(self):
+        suffix = ''
+        if len(self.entries) == 1:
+            suffix += ' [ENTER]'
+
+        line = self.formatter(
+            len(self.entries) + ord('a') - 1,
+            self.entries[-1],
+            suffix)
+
+        self.out_write(line)
+
+    def default_format(self, index, path, suffix):
+        return '{0:c}: {1}'.format(index, path)
+
+    def out_write(self, text):
+        self.fd.write(text)
+        self.fd.flush()
+
+
 class Go2(object):
     def __init__(self):
         self.pool = ProcessPool()
@@ -1012,7 +993,7 @@ def create_directory_wizzard(path):
         save_target(path)
         return 0
 
-    # (s)earch
+    # search
     Go2().main()
 
 
