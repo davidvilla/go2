@@ -110,54 +110,52 @@ class Test_QueueReactor(unittest.TestCase):
         # then
         # reach this
 
-    def test_exception_break_reactor(self):
+    def test_exception_break_reactor_and_re_raises_exception(self):
         def raise_exception():
             raise go2.CancelException()
 
         # given
         self.sut.timeout_add(1, raise_exception)
 
-        # when
-        self.sut.run()
-
-        # then
-        # reach this
+        # when/then
+        with self.assertRaises(go2.CancelException):
+            self.sut.run()
 
 
-class Test_PathStorage(unittest.TestCase):
+class Test_PathBuffer(unittest.TestCase):
     def setUp(self):
         self.path = '/usr/share'
 
     def test_add_level0(self):
         # given
-        sut = go2.PathStorage(empty_stub())
+        sut = go2.PathBuffer(empty_stub())
 
         # when
-        sut.add(self.path, 0)
+        sut.add((self.path, 0))
 
         # then
-        self.assertIn(self.path, sut.group[0])
+        self.assertIn(self.path, sut.groups[0])
 
     def test_add_level0_ignore_repeat(self):
         # given
-        sut = go2.PathStorage(empty_stub())
+        sut = go2.PathBuffer(empty_stub())
 
         # when
-        sut.add(self.path, 0)
-        sut.add(self.path, 0)
+        sut.add((self.path, 0))
+        sut.add((self.path, 0))
 
         # then
-        self.assertEquals(len(sut.group[0]), 1)
+        self.assertEquals(len(sut.groups[0]), 1)
 
     def test_add_level0_goes_to_menu(self):
         # given
         menu = empty_mock()
         expect_call(menu.add_entry)
 
-        sut = go2.PathStorage(menu)
+        sut = go2.PathBuffer(menu)
 
         # when
-        sut.add(self.path, 0)
+        sut.add((self.path, 0))
 
         # then
         menu.assert_that_is_satisfied()
@@ -165,10 +163,10 @@ class Test_PathStorage(unittest.TestCase):
     def test_add_level_not0_does_not_go_to_menu(self):
         # given
         menu = empty_mock()
-        sut = go2.PathStorage(menu)
+        sut = go2.PathBuffer(menu)
 
         # when
-        sut.add(self.path, 1)
+        sut.add((self.path, 1))
 
         # then
         menu.assert_that_is_satisfied()
@@ -178,10 +176,10 @@ class Test_PathStorage(unittest.TestCase):
         menu = empty_mock()
         expect_call(menu.add_separator)
         expect_call(menu.add_entry).with_args(self.path)
-        sut = go2.PathStorage(menu)
+        sut = go2.PathBuffer(menu)
 
         # when
-        sut.add(self.path, 1)
+        sut.add((self.path, 1))
         sut.flush_alternate()
 
         # then
@@ -190,11 +188,11 @@ class Test_PathStorage(unittest.TestCase):
     def test_add_filtered(self):
         # given
         menu = empty_mock()
-        sut = go2.PathStorage(menu)
+        sut = go2.PathBuffer(menu)
         sut.add_filter(foo_filter)
 
         # when
-        sut.add('foo', 0)
+        sut.add(('foo', 0))
 
         # then
         menu.assert_that_is_satisfied()
@@ -236,34 +234,31 @@ class Test_Menu(unittest.TestCase):
 
         self.assertIn('foo', sut.entries)
 
-    def test_FullException(self):
+    def test_FullMenuException(self):
         # given
         sut = self.new_menu(max_size=1)
 
         # when/then
         sut.add_entry('foo')
-        with self.assertRaises(go2.Menu.FullException):
+        with self.assertRaises(go2.Menu.FullMenuException):
             sut.add_entry('bar')
 
-        self.assert_(sut.is_full())
+        self.assert_(sut.is_full)
 
     def test_print_ENTER_for_first(self):
         # given
-        fd = empty_mock()
-        expect_call(fd.write).with_args('a: foo [ENTER]')
+        fd = empty_spy()
         sut = self.new_menu(out=fd)
 
         # when
         sut.add_entry('foo')
 
         # then
-        fd.assert_that_is_satisfied()
+        assert_that_was_called(fd.write).with_args('a: foo')
 
     def test_print_second(self):
          # given
-        fd = empty_mock()
-        expect_call(fd.write).with_args(ANY_ARG)
-        expect_call(fd.write).with_args('b: bar')
+        fd = empty_spy()
         sut = self.new_menu(out=fd)
 
         # when
@@ -271,7 +266,8 @@ class Test_Menu(unittest.TestCase):
         sut.add_entry('bar')
 
         # then
-        fd.assert_that_is_satisfied()
+        assert_that_was_called(fd.write).with_args(ANY_ARG)
+        assert_that_was_called(fd.write).with_args('b: bar')
 
     def test_valid_key(self):
         # given
@@ -283,7 +279,7 @@ class Test_Menu(unittest.TestCase):
         sut.input_handler(fd)
 
         # then
-        self.assertEquals(sut.choice, 0)
+        self.assertEquals(sut.target, 'foo')
         assert_that_was_called(self.reactor_spy.quit)
 
     def test_wrong_key_is_ignored(self):
@@ -296,7 +292,7 @@ class Test_Menu(unittest.TestCase):
         sut.input_handler(fd)
 
         # then
-        self.assertEquals(sut.choice, None)
+        self.assertEquals(sut.target, None)
 
     def test_ESC_quit_reactor(self):
        # given

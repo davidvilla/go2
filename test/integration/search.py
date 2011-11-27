@@ -26,62 +26,53 @@ def pipe():
 
 
 class Test_Search(unittest.TestCase):
+    def create_scenario(self, menu_size=26):
+        self.queue = mp.Queue()
+        self.read_end, self.write_end = pipe()
+        self.out = empty_spy()
+
+        self.reactor = go2.QueueReactor()
+        self.menu = go2.Menu(self.reactor, self.out, max_size=menu_size)
+
+        self.path_buffer = go2.PathBuffer(self.menu)
+
+        self.reactor.queue_add_watch(
+            self.queue,
+            go2.QueueExtractor(self.path_buffer.add))
+        self.reactor.io_add_watch(self.read_end, self.menu.input_handler)
+
     def test_choice_first_entry_with_previous_ignored(self):
         # given
-        queue = mp.Queue()
-        read_end, write_end = pipe()
-        out = empty_spy()
-
-        reactor = go2.QueueReactor()
-        menu = go2.Menu(reactor, out)
-
-        path_storage = go2.PathStorage(menu)
-        path_storage.add_filter(foo_filter)
-
-        reactor.queue_add_watch(queue, go2.QueueExtractor(path_storage.add))
-        reactor.io_add_watch(read_end, menu.input_handler)
+        self.create_scenario()
+        self.path_buffer.add_filter(foo_filter)
 
         # when
-        queue.put(('foo', 0))
-        queue.put(('bar', 0))
-        write_end.write('a')
-        reactor.run()
+        self.queue.put(('foo', 0))
+        self.queue.put(('bar', 0))
+        self.write_end.write('a')
+        self.reactor.run()
 
         # then
-        self.assertEquals(path_storage.group[0], ['bar'])
-        self.assertEquals(menu.entries, ['bar'])
-        assert_that_was_called(out.write).with_args('a: bar [ENTER]')
-        self.assertEquals(menu.choice, 0)
+        self.assertEquals(self.path_buffer.groups[0], ['bar'])
+        self.assertEquals(self.menu.entries, ['bar'])
+        assert_that_was_called(self.out.write).with_args('a: bar')
+        self.assertEquals(self.menu.target, 'bar')
 
-#    def test_threaded(self):
-#        # given
-#        queue = mp.Queue()
-#        out = empty_spy()
-#        menu = go2.Menu(out)
-#        path_storage = go2.PathStorage(menu)
-#        read_end, write_end = pipe()
-#
-#        queue_reader = go2.QueueReaderThread(queue, path_storage.add)
-#        key_reader = go2.KeyReaderThread(read_end, menu.input_handler)
-#
-#        # when
-#        queue_reader.start()
-#        key_reader.start()
-#
-#        queue.put(('foo', 0))
-#        queue.put(('bar', 0))
-#        write_end.write('a')
-#
-#        key_reader.join()
-#        queue_reader.quit()
-#
-#        # then
+    def test_full_menu(self):
+        # given
+        self.create_scenario(menu_size=1)
 
+        # when
+        self.queue.put(('foo', 0))
+        self.queue.put(('bar', 0))
+        self.reactor.process_pending()
+
+        # then
 
 
 # given: un pool con tareas
 # when:  el pool queda ocioso
-# then:  el reactor acaba
+# then:  el menu espera una elección
 
 # given: menu con una sola entrada
 # when:  todas las tareas han terminado
@@ -93,7 +84,7 @@ class Test_Search(unittest.TestCase):
 
 # given: un reactor y un menú
 # when:  el menú se llena
-# then:  el reactor acaba
+# then:  el menu espera una elección
 
 
 # condiciones de fin
