@@ -71,7 +71,7 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 
-VERSION = '1.20111104'
+VERSION = '1.20111128'
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
