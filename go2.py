@@ -781,18 +781,19 @@ class PathBuffer(object):
     def flush_alternate(self):
 
         def add_paths_of_group(group):
-            try:
-                for path in group:
-                    self.menu.add_entry(path)
-            except Menu.FullMenuException:
-                return
+            for path in group:
+                self.menu.add_entry(path)
 
-        for level in range(1, 4):
-            if not self.groups[level]:
-                continue
+        try:
+            for level in range(1, 4):
+                if not self.groups[level]:
+                    continue
 
-            self.menu.add_separator()
-            add_paths_of_group(self.groups[level])
+                self.menu.add_separator()
+                add_paths_of_group(self.groups[level])
+
+        except Menu.FullMenuException:
+            return
 
 
 class Menu(object):
