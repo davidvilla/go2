@@ -5,9 +5,10 @@ import multiprocessing as mp
 import socket
 
 import unittest2 as unittest
-from pyDoubles.framework import empty_spy, assert_that_was_called
+from pyDoubles.framework import empty_spy, empty_stub, \
+    when, assert_that_was_called
 
-import go2
+from go2 import PathItem, QueueReactor, QueueExtractor, PathBuffer, Menu, EndChecker
 
 
 def foo_filter(value):
@@ -31,24 +32,30 @@ class Test_Search(unittest.TestCase):
         self.read_end, self.write_end = pipe()
         self.out = empty_spy()
 
-        self.reactor = go2.QueueReactor()
-        self.menu = go2.Menu(self.reactor, self.out, max_size=menu_size)
+        self.reactor = QueueReactor()
+        self.menu = Menu(self.reactor, self.out, max_size=menu_size)
 
-        self.path_buffer = go2.PathBuffer(self.menu)
+        self.path_buffer = PathBuffer(self.menu)
 
         self.reactor.queue_add_watch(
             self.queue,
-            go2.QueueExtractor(self.path_buffer.add))
+            QueueExtractor(self.path_buffer.add))
+
+    def register_input(self):
         self.reactor.io_add_watch(self.read_end, self.menu.input_handler)
+
+    def put(self, path):
+        self.queue.put(PathItem(path))
 
     def test_choice_first_entry_with_previous_ignored(self):
         # given
         self.create_scenario()
+        self.register_input()
         self.path_buffer.add_filter(foo_filter)
 
         # when
-        self.queue.put(('foo', 0))
-        self.queue.put(('bar', 0))
+        self.put('foo')
+        self.put('bar')
         self.write_end.write('a')
         self.reactor.run()
 
@@ -61,13 +68,39 @@ class Test_Search(unittest.TestCase):
     def test_full_menu(self):
         # given
         self.create_scenario(menu_size=1)
+        self.register_input()
 
         # when
-        self.queue.put(('foo', 0))
-        self.queue.put(('bar', 0))
+        self.put('foo')
+        self.put('bar')
         self.reactor.process_pending()
 
         # then
+        assert_that_was_called(self.out.write).with_args('a: foo')
+
+    def test_list_mode(self):
+        def raw_formatter(index, path, suffix):
+            return path + '\n'
+
+        paths = ['foo', 'bar']
+
+        # given
+        pool = empty_stub()
+        when(pool.has_tasks).then_return(False)
+
+        self.create_scenario()
+        self.reactor.timeout_add(250, EndChecker(
+                pool, self.path_buffer, self.menu))
+        self.menu.formatter = raw_formatter
+
+        # when
+        for i in paths:
+            self.put(i)
+        self.reactor.run()
+
+        # then
+        for i in paths:
+            assert_that_was_called(self.out.write).with_args(i + '\n')
 
 
 # given: un pool con tareas

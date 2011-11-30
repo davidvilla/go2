@@ -91,6 +91,15 @@ class Go2Exception(Exception):
         return repr(self)
 
 
+class PathItem:
+    def __init__(self, path, level=0):
+        self.path = path
+        self.level = level
+
+    def __eq__(self, other):
+        return self.path == other.path and self.level == other.level
+
+
 def go2setup(mode='r+'):
     try:
         if ACTIVATION_CMD in config.fs.getcontents(os.path.join(USERDIR, '.bashrc')):
@@ -130,7 +139,7 @@ def high_pattern(pattern, path):
     return retval
 
 
-def format_path(index, path, suffix):
+def highpath_formatter(index, path, suffix):
     path = high_pattern(config.pattern, path)
     path = re.sub('^{0}'.format(USERDIR), '~', path)
     return '\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
@@ -265,8 +274,7 @@ def from_file_provider(path_store):
             del path_store.data[path]
             continue
 
-        yield path, level
-#        output.put((path, level))
+        yield PathItem(path, level)
 
 
 class CommandProvider:
@@ -341,7 +349,7 @@ class CommandProvider:
                 if not config.fs.exists(path):
                     continue
 
-                yield path, level
+                yield PathItem(path, level)
 
         except IOError:
             self.terminate()
@@ -752,28 +760,26 @@ class PathBuffer(object):
         self.groups = [list() for x in range(4)]
         self.filters = []
 
-    def add(self, item):
-        if item is None:
+    def add(self, path_item):
+        if path_item is None:
             return True
 
-        path, level = item
-
         try:
-            self._tryTo_add(path, level)
+            self._tryTo_add(path_item)
         except Menu.FullMenuException:
             return False
 
         return True
 
-    def _tryTo_add(self, path, level):
-        if path in self.groups[level] or \
-           any(f(path) for f in self.filters):
+    def _tryTo_add(self, item):
+        if item.path in self.groups[item.level] or \
+           any(f(item.path) for f in self.filters):
             return
 
-        self.groups[level].append(path)
+        self.groups[item.level].append(item.path)
 
-        if level == MatchLevel.START:
-            self.menu.add_entry(path)
+        if item.level == MatchLevel.START:
+            self.menu.add_entry(item.path)
 
     def add_filter(self, f):
         self.filters.append(f)
@@ -811,7 +817,7 @@ class Menu(object):
         self.entries = []
         self.is_full = False
         self.target = None
-        self.formatter = self.default_format
+        self.formatter = self.default_formatter
 
     def input_handler(self, fd, condition=None):
         key = ord(fd.read(1))
@@ -872,7 +878,7 @@ class Menu(object):
 
         self.out_write(line)
 
-    def default_format(self, index, path, suffix):
+    def default_formatter(self, index, path, suffix):
         return '{0:c}: {1}'.format(index, path)
 
     def out_write(self, text):
@@ -880,61 +886,14 @@ class Menu(object):
         self.fd.flush()
 
 
-class Go2(object):
-    def __init__(self):
-        self.pool = ProcessPool()
-        self.reactor = QueueReactor()
-        self.menu = Menu(self.reactor, sys.stdout)
-        self.path_buffer = PathBuffer(self.menu)
-
-        self.menu.formatter = format_path
-        self.tty = TTY()
+class EndChecker(object):
+    def __init__(self, pool, path_buffer, menu):
+        self.pool = pool
+        self.path_buffer = path_buffer
+        self.menu = menu
         self.progress = cycle(range(4))
 
-    def main(self):
-        retval = 1
-        self.history = PathFileStore(GO2HISTORY)
-        self.cache = PathFileStore(GO2CACHE)
-
-        self.create_tasks()
-
-        self.reactor.queue_add_watch(self.pool.output_queue,
-                                     QueueExtractor(self.path_buffer.add))
-        self.reactor.io_add_watch(sys.stdin, self.menu.input_handler)
-        self.reactor.timeout_add(250, self._end_checker)
-        self.reactor.at_quit(self.tty.restore)
-
-        try:
-            self.tty.set_raw()
-            self.reactor.run()
-            self.save_results()
-            retval = 0
-
-        except CancelException:
-            rprint("(canceled by user)\n")
-        except NotMatchException:
-            rprint("(pattern not found)\n")
-
-        self.pool.terminate()
-        return retval
-
-    def create_tasks(self):
-        self.pool.add_task(from_file_provider, self.history)
-        self.pool.sleep_free_workers(1)
-
-        self.pool.add_task(from_file_provider, self.cache)
-
-        paths = ListUniq()
-        paths.extend([os.getcwd(), USERDIR])
-#        paths.extend(self.not_overlapped_history())
-
-        if config.from_root:
-            paths.append('/')
-
-        for path in paths:
-            self.pool.add_task(tree_provider, path)
-
-    def _end_checker(self):
+    def __call__(self):
         if self.menu.is_full:
             rprint('(warning: too many matches!)\n')
             rprint('Select path: ')
@@ -957,6 +916,63 @@ class Go2(object):
 
         rprint('Select path: ')
         return False
+
+
+class Go2(object):
+    def __init__(self):
+        self.pool = ProcessPool()
+        self.reactor = QueueReactor()
+        self.menu = Menu(self.reactor, sys.stdout)
+        self.path_buffer = PathBuffer(self.menu)
+
+        self.menu.formatter = highpath_formatter
+        self.tty = TTY()
+
+    def main(self):
+        retval = 1
+        self.history = PathFileStore(GO2HISTORY)
+        self.cache = PathFileStore(GO2CACHE)
+
+        self.create_tasks()
+        self.setup_reactor()
+
+        try:
+            self.tty.set_raw()
+            self.reactor.run()
+            self.save_results()
+            retval = 0
+
+        except CancelException:
+            rprint("(canceled by user)\n")
+        except NotMatchException:
+            rprint("(pattern not found)\n")
+
+        self.pool.terminate()
+        return retval
+
+    def setup_reactor(self):
+        self.reactor.queue_add_watch(self.pool.output_queue,
+                                     QueueExtractor(self.path_buffer.add))
+        self.reactor.io_add_watch(sys.stdin, self.menu.input_handler)
+        self.reactor.timeout_add(250, EndChecker(
+                self.pool, self.path_buffer, self.menu))
+        self.reactor.at_quit(self.tty.restore)
+
+    def create_tasks(self):
+        self.pool.add_task(from_file_provider, self.history)
+        self.pool.sleep_free_workers(1)
+
+        self.pool.add_task(from_file_provider, self.cache)
+
+        paths = ListUniq()
+        paths.extend([os.getcwd(), USERDIR])
+#        paths.extend(self.not_overlapped_history())
+
+        if config.from_root:
+            paths.append('/')
+
+        for path in paths:
+            self.pool.add_task(tree_provider, path)
 
     def save_results(self):
         rprint("Changing to: {0}\n".format(high(self.menu.target)))
@@ -1044,6 +1060,9 @@ for details.'''.format(VERSION),
     parser.add_argument('-i', '--ignore-case', dest='ignorecase',
                         action='store_true', default=False,
                         help="ignore case search")
+    parser.add_argument('-l', '--list', dest='list',
+                        action='store_true', default=False,
+                        help="list matches only")
     parser.add_argument('-r', '--from-root', dest='from_root',
                         action='store_true',
                         help="search in whole file system")

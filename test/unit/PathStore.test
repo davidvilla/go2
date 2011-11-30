@@ -14,7 +14,7 @@ from fs.memoryfs import MemoryFS
 from pyDoubles.framework import *
 
 import go2
-from go2 import PathFileStore, from_file_provider
+from go2 import PathFileStore, from_file_provider, PathItem
 
 HOME = '/home/user'
 
@@ -92,7 +92,7 @@ class Test_from_file_provider(unittest.TestCase, StubFS):
 
         paths = list(from_file_provider(sut))
 
-        self.assertIn(('/home/user/lab', 0), paths)
+        self.assertIn(PathItem('/home/user/lab'), paths)
 
     def test_search_missing(self):
         "from_file_provider remove checked missing paths"
