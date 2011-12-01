@@ -28,7 +28,7 @@ try:
 except (OSError, ValueError):
     pass
 
-os.environ['LANG'] = 'C'
+#os.environ['LANG'] = 'C'
 
 import pwd
 import tty
@@ -36,6 +36,8 @@ import termios
 import time
 import signal
 import re
+import locale
+
 from threading import Thread
 import multiprocessing as mp
 import multiprocessing.queues as mp_queues
@@ -166,7 +168,7 @@ class MatchLevel:
 
 
 def pattern2re_start(pattern):
-    return str.join('', ['.*/({0})[^/]*'.format(x) for x in pattern]) + '$'
+    return unicode.join(u'', [u'.*/({0})[^/]*'.format(x) for x in pattern]) + u'$'
 
 
 def pattern2re_contain(pattern):
@@ -1074,11 +1076,17 @@ for details.'''.format(VERSION),
     retval = parser.parse_args(args)
     retval.parser = parser
 
+    print locale.getdefaultlocale()
+    encoding = locale.getdefaultlocale()[1]
+    retval.pattern = [unicode(x, encoding=encoding, errors='replace')
+                      for x in retval.pattern]
+
     # process args
     if retval.ignorecase:
         retval.pattern = [x.lower() for x in retval.pattern]
 
-    retval.apply_case = str.lower if retval.ignorecase else str
+#    retval.apply_case = str.lower if retval.ignorecase else str
+    print retval.pattern
 
     # application globals
     retval.fs = OSFS('/')

@@ -1,5 +1,6 @@
 # -*- mode:python; coding:utf-8 -*-
 
+import os
 import time
 import multiprocessing as mp
 import socket
@@ -78,7 +79,7 @@ class Test_Search(unittest.TestCase):
         # then
         assert_that_was_called(self.out.write).with_args('a: foo')
 
-    def test_list_mode(self):
+    def atest_list_mode(self):
         def raw_formatter(index, path, suffix):
             return path + '\n'
 
@@ -102,6 +103,8 @@ class Test_Search(unittest.TestCase):
         for i in paths:
             assert_that_was_called(self.out.write).with_args(i + '\n')
 
+    def test_unicode(self):
+        os.path.exists('ñandáéíóú')
 
 # given: un pool con tareas
 # when:  el pool queda ocioso
