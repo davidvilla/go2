@@ -37,6 +37,7 @@ import time
 import signal
 import re
 import locale
+encoding = locale.getdefaultlocale()[1]
 
 from threading import Thread
 import multiprocessing as mp
@@ -65,8 +66,7 @@ LOW  = chr(27) + '[m'
 
 USERDIR    = os.environ['HOME']
 GO2DIR     = os.path.join(USERDIR, '.go2')
-#GO2INCLUDE = os.path.join(GO2DIR, 'include')
-#GO2EXCLUDE = os.path.join(GO2DIR, 'exclude')
+GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE   = os.path.join(GO2DIR, 'cache')
 #GO2CONFIG  = os.path.join(GO2DIR, 'config')
@@ -86,6 +86,13 @@ logging.basicConfig(
     filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
+
+
+def to_unicode(text):
+    if isinstance(text, unicode):
+        return text
+
+    return unicode(text, encoding=encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -117,7 +124,7 @@ def go2setup(mode='r+'):
 
 
 def rprint(cad=''):
-    sys.stdout.write('\r%s' % cad)
+    sys.stdout.write("\r{0}".format(cad.encode(encoding)))
     sys.stdout.flush()
 
 
@@ -143,8 +150,8 @@ def high_pattern(pattern, path):
 
 def highpath_formatter(index, path, suffix):
     path = high_pattern(config.pattern, path)
-    path = re.sub('^{0}'.format(USERDIR), '~', path)
-    return '\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
+    path = re.sub(u'^{0}'.format(USERDIR), '~', path)
+    return u'\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
 
 
 class ListUniq(list):
@@ -172,29 +179,32 @@ def pattern2re_start(pattern):
 
 
 def pattern2re_contain(pattern):
-    return str.join('', ['.*/.*({0})[^/]*'.format(x) for x in pattern]) + '$'
+    return unicode.join(u'', [u'.*/.*({0})[^/]*'.format(x) for x in pattern]) + u'$'
 
 
+# FIXME: precompute RE
 def match(path):
     re_str = pattern2re_start(config.pattern)
-    if re.match(re_str, path):
+#    print re_str, path
+#    print type(re_str), type(path)
+    if re.match(re_str, path, re.UNICODE):
         return MatchLevel.START
 
-    if re.match(re_str, path, re.IGNORECASE):
+    if re.match(re_str, path, re.UNICODE | re.IGNORECASE):
         return MatchLevel.START_IGNORECASE
 
     re_str = pattern2re_contain(config.pattern)
-    if re.match(re_str, path):
+    if re.match(re_str, path, re.UNICODE):
         return MatchLevel.CONTAIN
 
-    if re.match(re_str, path, re.IGNORECASE):
+    if re.match(re_str, path, re.UNICODE | re.IGNORECASE):
         return MatchLevel.CONTAIN_IGNORECASE
 
     return MatchLevel.NO_MATCH
 
 
 def save_target(path):
-    config.fs.setcontents(GO2TMP, path)
+    config.fs.setcontents(GO2TMP, path.encode(encoding))
 
 
 class PathFileStore:
@@ -216,6 +226,9 @@ class PathFileStore:
             pass
 
     def _load_file_lines(self, fd):
+        def decode(path):
+            return path.strip().decode('utf8')
+
         for line in fd:
             line = line.strip()
             if not line:
@@ -226,7 +239,7 @@ class PathFileStore:
             except ValueError:
                 visits, path = 1, line
 
-            self.data[path.strip()] = int(visits)
+            self.data[decode(path)] = int(visits)
 
     def __iter__(self):
         def _cmp(p1, p2):
@@ -242,17 +255,22 @@ class PathFileStore:
     def insert(self, seq):
 #        self.log.debug("   Saving to file: %s (%s)" % (item,
 #                                                      str(len(self.data))))
-        if isinstance(seq, str):
+        assert isinstance(seq, (unicode, list))
+
+        if isinstance(seq, unicode):
             seq = [seq]
 
         for path in seq:
+            assert isinstance(path, unicode)
             visits = self.data.get(path, 0)
             self.data[path] = visits + 1
 
     def save(self):
+#        print "=", self.data
         with config.fs.open(self.path, 'w') as fd:
             for path, visits in self.data.items()[:self.size]:
-                fd.write("{0}:{1}\n".format(visits, path))
+                line = u"{0}:{1}\n".format(visits, path)
+                fd.write(line.encode('utf8'))
 
     def insert_and_save(self, item):
         self.insert(item)
@@ -706,7 +724,7 @@ class QueueReactor(gobject.MainLoop):
             try:
                 return self.func(*args)
             except Exception, e:
-#                print_exc()
+                print_exc()
                 logging.warning('{0!r}: {1}'.format(self.reactor, e))
                 self.reactor.exception = e
                 self.reactor.quit()
@@ -865,7 +883,7 @@ class Menu(object):
             self.is_full = True
             raise self.FullMenuException
 
-        self.entries.append(entry)
+        self.entries.append(to_unicode(entry))
         self.write_last()
 
     def write_last(self):
@@ -888,6 +906,22 @@ class Menu(object):
         self.fd.flush()
 
 
+class IgnoreManager(object):
+    def __init__(self, content):
+        self.ignored_names = [x.strip() for x in content.split()]
+
+    @classmethod
+    def from_file(cls, fname):
+        return IgnoreManager(config.fs.getcontents(fname))
+
+    def is_ignored(self, path):
+        assert path.startswith(os.sep), "It must be an absolute path"
+        retval = any(x in self.ignored_names for x in path.split(os.sep))
+        if retval:
+            logging.debug("Ignored: %s", path)
+        return retval
+
+
 class EndChecker(object):
     def __init__(self, pool, path_buffer, menu):
         self.pool = pool
@@ -897,13 +931,13 @@ class EndChecker(object):
 
     def __call__(self):
         if self.menu.is_full:
-            rprint('(warning: too many matches!)\n')
+            rprint(u"(warning: too many matches!)\n")
             rprint('Select path: ')
             self.pool.terminate()
             return False
 
         if self.pool.has_tasks():
-            rprint('\rSearching{0:3} '.format('.' * self.progress.next()))
+            rprint(u"\rSearching{0:3} ".format('.' * self.progress.next()))
             return True
 
         self.path_buffer.flush_alternate()
@@ -912,11 +946,11 @@ class EndChecker(object):
             raise NotMatchException
 
         if len(self.menu.entries) == 1:
-            rprint('(single match)\n')
+            rprint(u"(single match)\n")
             self.menu.perform_choice(0)
             return False
 
-        rprint('Select path: ')
+        rprint(u"Select path: ")
         return False
 
 
@@ -926,9 +960,17 @@ class Go2(object):
         self.reactor = QueueReactor()
         self.menu = Menu(self.reactor, sys.stdout)
         self.path_buffer = PathBuffer(self.menu)
-
         self.menu.formatter = highpath_formatter
         self.tty = TTY()
+
+        self.setup_ignore()
+
+    def setup_ignore(self):
+        try:
+            ignore_manager = IgnoreManager.from_file(GO2IGNORE)
+            self.path_buffer.add_filter(ignore_manager.is_ignored)
+        except ResourceNotFoundError:
+            pass
 
     def main(self):
         retval = 1
@@ -945,9 +987,9 @@ class Go2(object):
             retval = 0
 
         except CancelException:
-            rprint("(canceled by user)\n")
+            rprint(u"(canceled by user)\n")
         except NotMatchException:
-            rprint("(pattern not found)\n")
+            rprint(u"(pattern not found)\n")
 
         self.pool.terminate()
         return retval
@@ -962,7 +1004,7 @@ class Go2(object):
 
     def create_tasks(self):
         self.pool.add_task(from_file_provider, self.history)
-        self.pool.sleep_free_workers(1)
+        self.pool.sleep_free_workers(seconds=1)
 
         self.pool.add_task(from_file_provider, self.cache)
 
@@ -977,10 +1019,12 @@ class Go2(object):
             self.pool.add_task(tree_provider, path)
 
     def save_results(self):
-        rprint("Changing to: {0}\n".format(high(self.menu.target)))
+        rprint(u"Changing to: {0}\n".format(high(self.menu.target)))
         save_target(self.menu.target)
 
         self.history.insert_and_save(self.menu.target)
+
+        return
 
         logging.debug("Saved history %s", len(self.menu.entries))
         self.cache.insert_and_save(self.menu.entries)
@@ -1076,17 +1120,15 @@ for details.'''.format(VERSION),
     retval = parser.parse_args(args)
     retval.parser = parser
 
-    print locale.getdefaultlocale()
-    encoding = locale.getdefaultlocale()[1]
-    retval.pattern = [unicode(x, encoding=encoding, errors='replace')
-                      for x in retval.pattern]
+#    print locale.getdefaultlocale()
+    retval.pattern = [to_unicode(x) for x in retval.pattern]
 
     # process args
     if retval.ignorecase:
         retval.pattern = [x.lower() for x in retval.pattern]
 
 #    retval.apply_case = str.lower if retval.ignorecase else str
-    print retval.pattern
+#    print retval.pattern
 
     # application globals
     retval.fs = OSFS('/')

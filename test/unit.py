@@ -6,8 +6,11 @@ import os
 import time
 import multiprocessing as mp
 
-import unittest2 as unittest
+from unittest2 import TestCase
+
 from fs.memoryfs import MemoryFS
+from fs import ResourceNotFoundError
+
 from pyDoubles.framework import *
 import gobject
 
@@ -22,7 +25,7 @@ def foo_filter(value):
     return value == 'foo'
 
 
-class TestPool(unittest.TestCase):
+class TestPool(TestCase):
     def setUp(self):
         self.pool = go2.ProcessPool()
 
@@ -38,36 +41,7 @@ class TestPool(unittest.TestCase):
         self.pool.join()
 
 
-# class Test_FilteredObserver(unittest.TestCase):
-#     def observable_with_observer(self):
-#         self.ob = empty_mock()
-#         self.sut = go2.FilteredObservable()
-#         self.sut.register(self.ob.update)
-#
-#     def test_update(self):
-#         self.observable_with_observer()
-#         expect_call(self.ob.update).with_args('foo')
-#
-#         self.sut.notify('foo')
-#
-#         self.ob.assert_that_is_satisfied()
-#
-#     def test_filter(self):
-#
-#         def foo_filter(value):
-#             return value == 'foo'
-#
-#         self.observable_with_observer()
-#         expect_call(self.ob.update).with_args('bar')
-#         self.sut.add_filter(foo_filter)
-#
-#         self.sut.notify('foo')
-#         self.sut.notify('bar')
-#
-#         self.ob.assert_that_is_satisfied()
-
-
-class Test_QueueReactor(unittest.TestCase):
+class Test_QueueReactor(TestCase):
     def setUp(self):
         self.sut = go2.QueueReactor()
 
@@ -122,7 +96,7 @@ class Test_QueueReactor(unittest.TestCase):
             self.sut.run()
 
 
-class Test_PathBuffer(unittest.TestCase):
+class Test_PathBuffer(TestCase):
     def setUp(self):
         self.path = '/usr/share'
 
@@ -131,7 +105,7 @@ class Test_PathBuffer(unittest.TestCase):
         sut = go2.PathBuffer(empty_stub())
 
         # when
-        sut.add((self.path, 0))
+        sut.add(go2.PathItem(self.path, 0))
 
         # then
         self.assertIn(self.path, sut.groups[0])
@@ -141,8 +115,8 @@ class Test_PathBuffer(unittest.TestCase):
         sut = go2.PathBuffer(empty_stub())
 
         # when
-        sut.add((self.path, 0))
-        sut.add((self.path, 0))
+        sut.add(go2.PathItem(self.path, 0))
+        sut.add(go2.PathItem(self.path, 0))
 
         # then
         self.assertEquals(len(sut.groups[0]), 1)
@@ -155,7 +129,7 @@ class Test_PathBuffer(unittest.TestCase):
         sut = go2.PathBuffer(menu)
 
         # when
-        sut.add((self.path, 0))
+        sut.add(go2.PathItem(self.path, 0))
 
         # then
         menu.assert_that_is_satisfied()
@@ -166,7 +140,7 @@ class Test_PathBuffer(unittest.TestCase):
         sut = go2.PathBuffer(menu)
 
         # when
-        sut.add((self.path, 1))
+        sut.add(go2.PathItem(self.path, 1))
 
         # then
         menu.assert_that_is_satisfied()
@@ -179,7 +153,7 @@ class Test_PathBuffer(unittest.TestCase):
         sut = go2.PathBuffer(menu)
 
         # when
-        sut.add((self.path, 1))
+        sut.add(go2.PathItem(self.path, 1))
         sut.flush_alternate()
 
         # then
@@ -192,27 +166,13 @@ class Test_PathBuffer(unittest.TestCase):
         sut.add_filter(foo_filter)
 
         # when
-        sut.add(('foo', 0))
+        sut.add(go2.PathItem('foo', 0))
 
         # then
         menu.assert_that_is_satisfied()
 
 
-# class Test_quit_handler(unittest.TestCase):
-#     def test_any_key(self):
-#         # given
-#         reactor = empty_mock()
-#         expect_call(reactor.quit)
-#         sut = go2.QuitHandler(reactor)
-#
-#         # when
-#         sut(chr(go2.CTRL_C))
-#
-#         # then
-#         reactor.assert_that_is_satisfied()
-
-
-class Test_Menu(unittest.TestCase):
+class Test_Menu(TestCase):
     def setUp(self):
         self.reactor_spy = empty_spy()
         self.fd_stub = empty_stub()
@@ -308,3 +268,70 @@ class Test_Menu(unittest.TestCase):
 
     def FIXME_test_separators(self):
         pass
+
+
+class TestIgnore(TestCase):
+    def create_manager(self, content):
+        return go2.IgnoreManager(content)
+
+    def test_ignored_path_with_1_pattern(self):
+        sut = self.create_manager("foo")
+
+        self.assert_(
+            sut.is_ignored("/home/user/repo/foo"))
+
+    def test_ignored_path_with_2_patterns(self):
+        # given
+        sut = self.create_manager('''
+foo
+bar''')
+
+        # when
+        foo = sut.is_ignored("/home/foo")
+        bar = sut.is_ignored("/home/bar")
+
+        # then
+        self.assert_(foo and bar)
+
+    def test_not_matching_path(self):
+        sut = self.create_manager("foo")
+
+        self.assertFalse(
+            sut.is_ignored('/usr/share'))
+
+    def test_path_match_in_any_place(self):
+        sut = self.create_manager("foo")
+
+        self.assert_(
+            sut.is_ignored('/usr/foo/share'))
+
+    def test_path_not_match_if_not_full_name(self):
+        sut = self.create_manager("foo")
+
+        self.assertFalse(
+            sut.is_ignored('/usr/xxfoo'))
+
+    def test_from_file__missing_file(self):
+        # given
+        fs = MemoryFS()
+        config = go2.get_config()
+        config.fs = fs
+        go2.config = config
+
+        # when
+        with self.assertRaises(ResourceNotFoundError):
+            go2.IgnoreManager.from_file('ignore')
+
+    def test_from_file(self):
+        # given
+        fs = MemoryFS()
+        fs.createfile('ignore', 'foo')
+        config = go2.get_config()
+        config.fs = fs
+        go2.config = config
+
+        # when
+        sut = go2.IgnoreManager.from_file('ignore')
+
+        # then
+        self.assert_(sut.is_ignored('/home/foo'))

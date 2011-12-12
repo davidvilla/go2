@@ -35,9 +35,9 @@ class Test_match(unittest.TestCase):
 
     def test_single_i18n(self):
         self.assert_match(
-            ['ñandú'], Level.START,
-            ['/ñandú',
-             '/buzz/ñandúmar',
+            [u'ñandú'], Level.START,
+            [u'/ñandú',
+             u'/buzz/ñandúmar',
              ])
 
     def test_single_negative(self):

@@ -31,7 +31,7 @@ class StubFS(object):
         self.fs.makedir(fs.join(HOME, relpath), recursive=True)
 
     def PathFileStore_with_content(self, fpath, more=''):
-        self.fs.createfile(fpath, '''\
+        self.fs.createfile(fpath, u'''\
 1: /home/user/lab
 2: /home/user/lab/media
 ''' + more)
@@ -45,8 +45,8 @@ class Test_PathFileStore(unittest.TestCase, StubFS):
     def test_load_ok(self):
         sut = self.PathFileStore_with_content(fpath='paths')
         self.assertEquals(set(sut.data.keys()),
-                          set(['/home/user/lab',
-                               '/home/user/lab/media']))
+                          set([u'/home/user/lab',
+                               u'/home/user/lab/media']))
 
     def test_load_missing(self):
         sut = PathFileStore('missing')
@@ -66,15 +66,16 @@ class Test_PathFileStore(unittest.TestCase, StubFS):
         return sut
 
     def test_insert_new(self):
-        self.store_create_and_insert('paths', '/home/user/new', 3, 1)
+#        self.store_create_and_insert('paths', u'/home/user/new', 3, 1)
+        self.store_create_and_insert('paths', u'/XXX', 3, 1)
 
     def test_insert_old_most_visited(self):
-        path = '/home/user/lab/media'
+        path = u'/home/user/lab/media'
         sut = self.store_create_and_insert('paths', path, 2, 3)
         self.assertEquals(list(sut)[0], path)
 
     def test_insert_old_less_visited(self):
-        path = '/home/user/lab'
+        path = u'/home/user/lab'
         store = 'paths'
         sut = self.store_create_and_insert(store, path, 2, 2)
         sut.insert_and_save(path)
@@ -92,7 +93,7 @@ class Test_from_file_provider(unittest.TestCase, StubFS):
 
         paths = list(from_file_provider(sut))
 
-        self.assertIn(PathItem('/home/user/lab'), paths)
+        self.assertIn(PathItem(u'/home/user/lab'), paths)
 
     def test_search_missing(self):
         "from_file_provider remove checked missing paths"
