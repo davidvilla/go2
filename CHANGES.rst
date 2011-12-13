@@ -1,3 +1,9 @@
+Release 1.20111212
+------------------
+
+* Added support for .go2/ignore file
+
+
 Release 1.20111028
 ------------------
 
