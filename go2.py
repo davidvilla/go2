@@ -724,7 +724,7 @@ class QueueReactor(gobject.MainLoop):
             try:
                 return self.func(*args)
             except Exception, e:
-                print_exc()
+#                print_exc()
                 logging.warning('{0!r}: {1}'.format(self.reactor, e))
                 self.reactor.exception = e
                 self.reactor.quit()
