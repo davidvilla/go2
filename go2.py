@@ -409,149 +409,6 @@ class TTY:
         tty.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
 
-# class UI:
-#     max_size = 26
-#
-#     def __init__(self, pool):
-#         self.pool = pool
-#         self.paths = []
-#         self.alternate_paths = [list() for x in range(3)]
-#         self.menu_open = True
-#
-#         self.poll = select.poll()
-#         self.poll.register(sys.stdin, select.POLLIN)
-#
-#     def run(self):
-#         tty = TTY()
-#         tty.set_raw()
-#
-#         try:
-#             choice = self.wait_for_choice()
-#         finally:
-#             tty.restore()
-#             rprint()
-#
-#         return self.paths[choice]
-#
-#     def wait_for_choice(self):
-#         def single_match():
-#             return not self.menu_open and len(self.paths) == 1
-#
-#         while 1:
-#             self.process_pending()
-#
-#             key = self.get_key()
-#             if key is None:
-#                 if single_match():
-#                     rprint('(single match)\n')
-#                     return 0
-#
-#                 continue
-#
-#             choice = self.key2choice(key)
-#             if self.is_valid_choice(choice):
-#                 logging.debug('choice is %s', choice)
-#                 return choice
-#
-#     def get_key(self):
-#         keypress = self.poll.poll(100)
-#         if not keypress:
-#             return None
-#
-#         return ord(sys.stdin.read(1))
-#
-#     def process_pending(self):
-#         try:
-#             while 1:
-#                 item = self.pool.output_queue.get(timeout=0.1)
-#                 if item is None:
-#                     continue
-#
-#                 self.process_match(*item)
-#
-#         except Queue.Empty:
-#             pass
-#
-#         rprint(' ' * 20)
-#
-#         if self.menu_open:
-#             if self.pool.has_tasks():
-#                 rprint('Searching... ')
-#                 return
-#
-#             self.add_secondary_matches()
-#
-#         self.menu_open = False
-#
-#         if not self.paths:
-#             raise NotMatchException
-#
-#         rprint('Select a path: ')
-#
-#     def add_secondary_matches(self):
-#         for path_list in self.alternate_paths:
-#             if not self.menu_open:
-#                 return
-#
-#             if not path_list:
-#                 continue
-#
-#             rprint('   ~~~        \n')
-#
-#             for path in path_list:
-#                 self.process_match(path, 0)
-#
-#             del path_list[:]
-#
-#     def key2choice(self, key):
-#         if key in [ESC, CTRL_C]:
-#             raise CancelException
-#
-#         if key == ENTER:
-#             return 0
-#
-#         return key - ord('a')
-#
-#     def is_valid_choice(self, choice):
-#         return choice in [None] + range(0, len(self.paths))
-#
-#     def process_match(self, path, level):
-#         logging.debug("path:%s level:%s" % (path, level))
-#         target = self.paths if level == 0 else self.alternate_paths[level - 1]
-#
-#         if path in target:
-#             return
-#
-#         target.append(path)
-#
-#         if level == MatchLevel.START and self.menu_open:
-#             self.add_to_menu(path)
-#
-#     def add_to_menu(self, path):
-#         suffix = ''
-#         if path == os.getcwd():
-#             suffix = ' (the current directory)'
-#
-#         if len(self.paths) == 1:
-#             suffix += ' [ENTER]'
-#
-#         self.show_path(path, suffix)
-#
-#         if len(self.paths) == self.max_size:
-#             self.menu_open = False
-#             rprint('Warning: Too many matches!\r\n')
-#             rprint('Select a path: ')
-#
-#     def show_path(self, path, suffix):
-#         path = high_pattern(config.pattern, path)
-#         path = re.sub('^{0}'.format(USERDIR), '~', path)
-#
-#         rprint("{char:c}: {path}{suffix}\r\n".format(**dict(
-#                     char = len(self.paths) + ord('a') - 1,
-#                     path = path,
-#                     suffix = suffix)))
-#
-
 class ThreadStarted(Thread):
     def __init__(self, *args, **kargs):
         Thread.__init__(self, *args, **kargs)
@@ -634,81 +491,12 @@ class ProcessPool(object):
         self.terminate()
 
 
-#class Go2_old:
-#    def __init__(self):
-#        self.pool = ProcessPool()
-#
-#    def main(self):
-#        retval = 0
-#        self.history = PathFileStore(GO2HISTORY)
-#        self.cache = PathFileStore(GO2CACHE)
-#
-#        self.create_tasks()
-#        ui = UI(self.pool)
-#
-#        try:
-#            target = ui.run()
-#            if target == os.getcwd():
-#                raise NothingToDoException
-#
-#            rprint("Changing to: {0}\n".format(high(target)))
-#            save_target(target)
-#            self.history.insert_and_save(target)
-#
-#            logging.debug("Saved history %s", len(ui.paths))
-#            self.cache.insert_and_save(ui.paths)
-#
-#        except CancelException:
-#            print("(canceled by user)")
-#            retval = 1
-#
-#        except NotMatchException:
-#            print("(pattern does not match)\r")
-#            retval = 1
-#
-#        except NothingToDoException:
-#            print("(nothing to do)")
-#            retval = 0
-#
-#        self.pool.terminate()
-#        logging.debug('end')
-#        return retval
-#
-#    def not_overlapped_history(self):
-#        history_paths = []
-#        for p in sorted(self.history.data.keys(), key=len):
-#            if any(p.startswith(x) for x in history_paths):
-#                continue
-#
-#            history_paths.append(p)
-#
-##        print str.join('\n', history_paths)
-#        return history_paths
-#
-#    def create_tasks(self):
-#        self.pool.add_task(from_file_provider, self.history)
-#        self.pool.sleep_free_workers(1)
-#
-#        self.pool.add_task(from_file_provider, self.cache)
-#
-#        paths = ListUniq()
-#        paths.extend([os.getcwd(), USERDIR])
-##        paths.extend(self.not_overlapped_history())
-#
-#        if config.from_root:
-#            paths.append('/')
-#
-#        for path in paths:
-#            self.pool.add_task(tree_provider, path)
-
-
 class QueueExtractor(object):
     def __init__(self, callback):
         self.callback = callback
 
     def __call__(self, fd, condition, queue, *args):
         event = queue.get()
-#        logging.debug('queue.get() -> %s' % str(event))
 
         self.callback(event)
         return True
@@ -723,8 +511,11 @@ class QueueReactor(gobject.MainLoop):
         def __call__(self, *args):
             try:
                 return self.func(*args)
+
             except Exception, e:
-#                print_exc()
+                if not isinstance(e, Go2Exception):
+                    print_exc()
+
                 logging.warning('{0!r}: {1}'.format(self.reactor, e))
                 self.reactor.exception = e
                 self.reactor.quit()
