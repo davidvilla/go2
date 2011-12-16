@@ -1,3 +1,9 @@
+Resease 1.20111216
+------------------
+
+* "ENTER without matches bug" fixed
+
+
 Release 1.20111212
 ------------------
 

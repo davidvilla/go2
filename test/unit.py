@@ -229,6 +229,17 @@ class Test_Menu(TestCase):
         assert_that_was_called(fd.write).with_args(ANY_ARG)
         assert_that_was_called(fd.write).with_args('b: bar')
 
+    def test_select_first_with_empty_menu(self):
+        # given
+        sut = self.new_menu()
+        fd = self.input_stub('a')
+
+        # when
+        sut.input_handler(fd)
+
+        # then
+        self.assertEquals(sut.target, None)
+
     def test_valid_key(self):
         # given
         sut = self.new_menu()

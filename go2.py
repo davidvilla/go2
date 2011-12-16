@@ -650,9 +650,9 @@ class Menu(object):
 
     def key2choice(self, key):
         if key == ENTER:
-            return 0
-
-        choice = key - ord('a')
+            choice = 0
+        else:
+            choice = key - ord('a')
 
         if not self.is_valid_choice(choice):
             raise self.InvalidChoiceException()
