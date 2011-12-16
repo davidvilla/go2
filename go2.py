@@ -36,6 +36,7 @@ import termios
 import time
 import signal
 import re
+import logging
 import locale
 encoding = locale.getdefaultlocale()[1]
 
@@ -51,8 +52,6 @@ import gobject
 
 from fs.osfs import OSFS
 from fs import ResourceNotFoundError
-
-import logging
 
 import argparse
 
@@ -73,7 +72,7 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 
-VERSION = '1.20111128'
+VERSION = '1.20111216'
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
