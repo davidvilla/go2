@@ -23,6 +23,8 @@
 import sys
 import os
 
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
 try:
     sys.path.remove(os.getcwd())
 except (OSError, ValueError):
@@ -49,12 +51,8 @@ from traceback import print_exc
 from itertools import cycle
 
 import gobject
-
-from fs.osfs import OSFS
-from fs import ResourceNotFoundError
-
 import argparse
-
+from osfs import OSFS, ResourceNotFoundError
 
 ESC = 27
 CTRL_C = 3
