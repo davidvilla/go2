@@ -145,9 +145,13 @@ def high_pattern(pattern, path):
     return retval
 
 
+def replace_home_prefix(path):
+    return re.sub(u'^{0}'.format(USERDIR), '~', path)
+
+
 def highpath_formatter(index, path, suffix):
     path = high_pattern(config.pattern, path)
-    path = re.sub(u'^{0}'.format(USERDIR), '~', path)
+    path = replace_home_prefix(path)
     return u'\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
 
 
@@ -807,7 +811,7 @@ class Go2(object):
             self.pool.add_task(tree_provider, path)
 
     def save_results(self):
-        rprint(u"Changing to: {0}\n".format(high(self.menu.target)))
+        rprint(u"Changing to: {0}\n".format(high(replace_home_prefix(self.menu.target))))
         save_target(self.menu.target)
 
         self.history.insert_and_save(self.menu.target)

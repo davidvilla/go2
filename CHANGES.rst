@@ -1,4 +1,10 @@
-Resease 1.20111216
+Release 1.20111219
+------------------
+
+* OSFS fake to reduce initialization time 
+
+
+Release 1.20111216
 ------------------
 
 * "ENTER without matches bug" fixed
