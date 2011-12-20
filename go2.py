@@ -257,11 +257,13 @@ class PathFileStore:
         assert isinstance(seq, list)
         for path in seq:
             self.add_visit(path)
+        return self
 
     def add_visit(self, path):
-        assert isinstance(path, unicode)
+        assert isinstance(path, unicode), path
         visits = self.data.get(path, 0)
         self.data[path] = visits + 1
+        return self
 
     def save(self):
 #        print "=", self.data
@@ -270,16 +272,12 @@ class PathFileStore:
                 line = u"{0}:{1}\n".format(visits, path)
                 fd.write(line.encode('utf8'))
 
-    def add_and_save(self, item):
-        self.add_visit(item)
-        self.save()
-
     def __unicode__(self):
         return "<PathFileStore {0}>".format(self.path)
 
 
 def save_in_history(path):
-    PathFileStore(GO2HISTORY).add_and_save(path)
+    PathFileStore(GO2HISTORY).add_visit(path).save()
 
 
 def from_file_provider(path_store):
@@ -815,10 +813,10 @@ class Go2(object):
                 high(abbreviate_home_prefix(self.menu.target))))
         save_target(self.menu.target)
 
-        self.history.add_and_save(self.menu.target)
+        self.history.add_visit(self.menu.target).save()
 
         logging.debug("Saved history %s", len(self.menu.entries))
-        self.cache.add_and_save(self.menu.entries)
+        self.cache.add_visit_seq(self.menu.entries).save()
 
 
 def create_directory_wizzard(path):
