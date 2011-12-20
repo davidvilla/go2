@@ -99,7 +99,7 @@ class Go2Exception(Exception):
 
 class PathItem:
     def __init__(self, path, level=0):
-        self.path = path
+        self.path = to_unicode(path)
         self.level = level
 
     def __eq__(self, other):
@@ -253,18 +253,15 @@ class PathFileStore:
         for path, visits in sorted(self.data.items(), cmp=_cmp):
             yield path
 
-    def insert(self, seq):
-#        self.log.debug("   Saving to file: %s (%s)" % (item,
-#                                                      str(len(self.data))))
-        assert isinstance(seq, (unicode, list))
-
-        if isinstance(seq, unicode):
-            seq = [seq]
-
+    def add_visit_seq(self, seq):
+        assert isinstance(seq, list)
         for path in seq:
-            assert isinstance(path, unicode)
-            visits = self.data.get(path, 0)
-            self.data[path] = visits + 1
+            self.add_visit(path)
+
+    def add_visit(self, path):
+        assert isinstance(path, unicode)
+        visits = self.data.get(path, 0)
+        self.data[path] = visits + 1
 
     def save(self):
 #        print "=", self.data
@@ -273,8 +270,8 @@ class PathFileStore:
                 line = u"{0}:{1}\n".format(visits, path)
                 fd.write(line.encode('utf8'))
 
-    def insert_and_save(self, item):
-        self.insert(item)
+    def add_and_save(self, item):
+        self.add_visit(item)
         self.save()
 
     def __unicode__(self):
@@ -282,7 +279,7 @@ class PathFileStore:
 
 
 def save_in_history(path):
-    PathFileStore(GO2HISTORY).insert_and_save(path)
+    PathFileStore(GO2HISTORY).add_and_save(path)
 
 
 def from_file_provider(path_store):
@@ -584,6 +581,9 @@ class PathBuffer(object):
         return True
 
     def _tryTo_add(self, item):
+#        print '\r', repr(item.path)
+#        print '\r', self.groups[item.level]
+
         if item.path in self.groups[item.level] or \
            any(f(item.path) for f in self.filters):
             return
@@ -815,12 +815,10 @@ class Go2(object):
                 high(abbreviate_home_prefix(self.menu.target))))
         save_target(self.menu.target)
 
-        self.history.insert_and_save(self.menu.target)
-
-        return
+        self.history.add_and_save(self.menu.target)
 
         logging.debug("Saved history %s", len(self.menu.entries))
-        self.cache.insert_and_save(self.menu.entries)
+        self.cache.add_and_save(self.menu.entries)
 
 
 def create_directory_wizzard(path):
