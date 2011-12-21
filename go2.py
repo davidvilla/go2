@@ -605,8 +605,9 @@ class PathBuffer(object):
                 if not self.groups[level]:
                     continue
 
-                self.menu.add_separator()
                 add_paths_of_group(self.groups[level])
+                if level != 3:
+                    self.menu.add_separator()
 
         except Menu.FullMenuException:
             return
@@ -666,7 +667,7 @@ class Menu(object):
         self.reactor.quit()
 
     def add_separator(self):
-        self.out_write('\r   ~~~        \n')
+        self.out_write('\r   ···        \n')
 
     def add_entry(self, entry):
         if len(self.entries) >= self.max_size:
