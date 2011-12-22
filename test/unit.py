@@ -8,6 +8,7 @@ import multiprocessing as mp
 
 from unittest2 import TestCase
 
+import fs
 from fs.memoryfs import MemoryFS
 from fs import ResourceNotFoundError
 
@@ -17,12 +18,28 @@ import gobject
 import go2
 
 
+HOME = '/home/user'
+
+
 def hello_task():
     return ["hi"]
 
 
 def foo_filter(value):
     return value == 'foo'
+
+
+class StubFS(object):
+    def setUp(self):
+        self.fs = MemoryFS()
+        self.mkdir('lab')
+
+        config = go2.get_config([])
+        config.fs = self.fs
+        go2.config = config
+
+    def mkdir(self, relpath):
+        self.fs.makedir(fs.join(HOME, relpath), recursive=True)
 
 
 class TestPool(TestCase):
@@ -170,6 +187,116 @@ class Test_PathBuffer(TestCase):
 
         # then
         menu.assert_that_is_satisfied()
+
+
+class PathFileHelper(StubFS):
+    def PathFileStore_with_content(self, store, more=''):
+        self.fs.createfile(store, u'''\
+1: /home/user/lab
+2: /home/user/lab/media
+''' + more)
+        return go2.PathFileStore(store)
+
+
+class Test_PathFileStore(TestCase, PathFileHelper):
+    def setUp(self):
+        StubFS.setUp(self)
+        self.store_fpath = '/paths'
+
+    def assert_visits(self, store_path, path, visits):
+        self.assertIn("{0}:{1}\n".format(visits, path),
+                      self.fs.getcontents(self.store_fpath))
+
+    def store_create_and_insert(self, store_path, path, size=None, visits=None):
+        sut = self.PathFileStore_with_content(store_path)
+        sut.add_visit(path).save()
+        if size:
+            self.assertEquals(len(sut.data), size)
+        if visits:
+            self.assert_visits(store_path, path, visits)
+        return sut
+
+    def test_load_ok(self):
+        sut = self.PathFileStore_with_content(store=self.store_fpath)
+        self.assertItemsEqual(
+            sut.data.keys(),
+            [u'/home/user/lab', u'/home/user/lab/media'])
+
+    def test_load_missing(self):
+        with self.assertRaises(ResourceNotFoundError):
+            go2.PathFileStore('missing')
+
+    def test_insert_new(self):
+        self.store_create_and_insert(self.store_fpath, u'/XXX', 3, 1)
+
+    def test_insert_old_most_visited(self):
+        path = u'/home/user/lab/media'
+        sut = self.store_create_and_insert(
+            self.store_fpath, path, size=2, visits=3)
+        self.assertEquals(list(sut)[0], path)
+
+    def test_insert_old_less_visited(self):
+        path = u'/home/user/lab'
+        sut = self.store_create_and_insert(
+            self.store_fpath, path, size=2, visits=2)
+        sut.add_visit(path).save()
+        self.assert_visits(self.store_fpath, path, 3)
+        self.assertEquals(list(sut)[0], path)
+
+    def test_deprecated_file_format(self):
+        # given
+        self.fs.createfile(self.store_fpath, u'''\
+/home/user/lab
+/home/user/lab/media
+''')
+        # when
+        go2.PathFileStore(self.store_fpath).save()
+
+        # then
+        self.assertItemsEqual(
+            self.fs.getcontents(self.store_fpath).split(),
+            u'''\
+1:/home/user/lab
+1:/home/user/lab/media
+'''.split())
+
+    def test_wrong_file_encoding_lines_are_pruned(self):
+        # given
+        go2.config.encoding = 'utf-8'
+        self.fs.createfile(self.store_fpath, u'''\
+1:/foo
+1:/home/ñandú
+'''.encode('latin1'))
+
+        # when
+        go2.PathFileStore(self.store_fpath).save()
+
+        # then
+        self.assertEquals(
+            self.fs.getcontents(self.store_fpath).strip(),
+            "1:/foo")
+
+
+class Test_from_file_provider(TestCase, PathFileHelper):
+    def setUp(self):
+        StubFS.setUp(self)
+
+    def test_search_existing(self):
+        sut = self.PathFileStore_with_content('paths')
+        go2.config.pattern = ['la']
+
+        paths = list(go2.from_file_provider(sut))
+
+        self.assertIn(go2.PathItem(u'/home/user/lab'), paths)
+
+    def test_search_missing(self):
+        "from_file_provider remove checked missing paths"
+        sut = self.PathFileStore_with_content('paths')
+        go2.config.pattern = ['med']
+
+        paths = list(go2.from_file_provider(sut))
+
+        self.assertFalse(paths)
 
 
 class Test_Menu(TestCase):

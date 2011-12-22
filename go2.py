@@ -40,7 +40,6 @@ import signal
 import re
 import logging
 import locale
-encoding = locale.getdefaultlocale()[1]
 
 from threading import Thread
 import multiprocessing as mp
@@ -89,7 +88,7 @@ def to_unicode(text):
     if isinstance(text, unicode):
         return text
 
-    return unicode(text, encoding=encoding, errors='replace')
+    return unicode(text, encoding=config.encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -121,7 +120,7 @@ def go2setup(mode='r+'):
 
 
 def rprint(cad=''):
-    sys.stdout.write("\r{0}".format(cad.encode(encoding)))
+    sys.stdout.write("\r{0}".format(cad.encode(config.encoding)))
     sys.stdout.flush()
 
 
@@ -205,7 +204,7 @@ def match(path):
 
 
 def save_target(path):
-    config.fs.setcontents(GO2TMP, path.encode(encoding))
+    config.fs.setcontents(GO2TMP, path.encode(config.encoding))
 
 
 class PathFileStore:
@@ -240,7 +239,10 @@ class PathFileStore:
             except ValueError:
                 visits, path = 1, line
 
-            self.data[decode(path)] = int(visits)
+            try:
+                self.data[decode(path)] = int(visits)
+            except UnicodeDecodeError:
+                continue
 
     def __iter__(self):
         def _cmp(p1, p2):
@@ -910,7 +912,8 @@ for details.'''.format(VERSION),
     retval = parser.parse_args(args)
     retval.parser = parser
 
-#    print locale.getdefaultlocale()
+    retval.encoding = locale.getdefaultlocale()[1]
+
     retval.pattern = [to_unicode(x) for x in retval.pattern]
 
     # process args
