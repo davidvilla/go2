@@ -9,7 +9,7 @@ import unittest2 as unittest
 from pyDoubles.framework import empty_spy, empty_stub, \
     when, assert_that_was_called
 
-from go2 import PathItem, QueueReactor, QueueExtractor, PathBuffer, Menu, EndChecker
+import go2
 
 
 def foo_filter(value):
@@ -28,25 +28,28 @@ def pipe():
 
 
 class Test_Search(unittest.TestCase):
+    def setUp(self):
+        go2.config = go2.get_config()
+
     def create_scenario(self, menu_size=26):
         self.queue = mp.Queue()
         self.read_end, self.write_end = pipe()
         self.out = empty_spy()
 
-        self.reactor = QueueReactor()
-        self.menu = Menu(self.reactor, self.out, max_size=menu_size)
+        self.reactor = go2.QueueReactor()
+        self.menu = go2.Menu(self.reactor, self.out, max_size=menu_size)
 
-        self.path_buffer = PathBuffer(self.menu)
+        self.path_buffer = go2.PathBuffer(self.menu)
 
         self.reactor.queue_add_watch(
             self.queue,
-            QueueExtractor(self.path_buffer.add))
+            go2.QueueExtractor(self.path_buffer.add))
 
     def register_input(self):
         self.reactor.io_add_watch(self.read_end, self.menu.input_handler)
 
     def put(self, path):
-        self.queue.put(PathItem(path))
+        self.queue.put(go2.PathItem(path))
 
     def test_choice_first_entry_with_previous_ignored(self):
         # given

@@ -38,7 +38,7 @@ class ParentDirectoryMissingError(FSError):
 
 def convert_os_errors(func):
     opname = func.__name__
-    
+
     @wraps(func)
     def wrapper(self, *args, **kwds):
         try:
@@ -143,3 +143,5 @@ class OSFS(object):
     def isfile(self, fpath):
         return os.path.isfile(fpath)
 
+    def isdir(self, path):
+        return os.path.isdir(path)

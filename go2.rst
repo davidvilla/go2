@@ -49,7 +49,7 @@ This program follows the usual GNU command line syntax, with long
 options starting with two dashes ('-'). A summary of options is
 included below. For a complete description, see the Info files.
 
---cd=PATH	Just change working directory
+--cd            Just change working directory
 
 -i		Case insensitive.
 

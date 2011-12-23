@@ -84,11 +84,13 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 
-def to_unicode(text):
+def to_unicode(text, encoding=None):
+    encoding = encoding or config.encoding
+
     if isinstance(text, unicode):
         return text
 
-    return unicode(text, encoding=config.encoding, errors='replace')
+    return unicode(text, encoding=encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -774,7 +776,6 @@ class Go2(object):
         self.setup_reactor()
 
         try:
-            self.tty.set_raw()
             self.reactor.run()
             self.save_results()
             retval = 0
@@ -788,6 +789,7 @@ class Go2(object):
         return retval
 
     def setup_reactor(self):
+        self.tty.set_raw()
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
         self.reactor.io_add_watch(sys.stdin, self.menu.input_handler)
@@ -802,13 +804,16 @@ class Go2(object):
         self.pool.add_task(from_file_provider, self.cache)
 
         paths = ListUniq()
-        paths.extend([os.getcwd(), USERDIR])
+        paths.extend([config.basedir, USERDIR])
 #        paths.extend(self.not_overlapped_history())
 
         if config.from_root:
             paths.append('/')
 
         for path in paths:
+            if not config.fs.isdir(path):
+                rprint("('{0}' does not exist)\n".format(path))
+
             self.pool.add_task(tree_provider, path)
 
     def save_results(self):
@@ -820,6 +825,10 @@ class Go2(object):
 
         logging.debug("Saved history %s", len(self.menu.entries))
         self.cache.add_visit_seq(self.menu.entries).save()
+
+
+#class Go2Interactive(Go2):
+#    def __init__(self):
 
 
 def create_directory_wizzard(path):
@@ -880,6 +889,8 @@ def chdir_decorator(wizzard=False):
 def get_config(args=None):
     args = args or []
 
+    encoding = locale.getdefaultlocale()[1]
+
     parser = argparse.ArgumentParser(
         prog = 'go2',
         description = '''\
@@ -893,13 +904,14 @@ for details.'''.format(VERSION),
         formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('pattern', nargs='*', help="pattern to find")
+    parser.add_argument('-b', '--basedir', metavar='DIR', default=os.getcwd(),
+                        help="search from DIR instead of from working directory")
     parser.add_argument('--cd', dest='chdir', action="store_true",
-                        help="change to given dir and add it to the cache (useful as 'cd' alias)")
+                        help="'cd' alias with caching")
     parser.add_argument('-i', '--ignore-case', dest='ignorecase',
                         action='store_true', default=False,
                         help="ignore case search")
-    parser.add_argument('-l', '--list', dest='list',
-                        action='store_true', default=False,
+    parser.add_argument('-l', '--list', dest='listonly', action='store_true',
                         help="list matches only")
     parser.add_argument('-r', '--from-root', dest='from_root',
                         action='store_true',
@@ -912,9 +924,8 @@ for details.'''.format(VERSION),
     retval = parser.parse_args(args)
     retval.parser = parser
 
-    retval.encoding = locale.getdefaultlocale()[1]
-
-    retval.pattern = [to_unicode(x) for x in retval.pattern]
+    retval.encoding = encoding
+    retval.pattern = [to_unicode(x, encoding) for x in retval.pattern]
 
     # process args
     if retval.ignorecase:
