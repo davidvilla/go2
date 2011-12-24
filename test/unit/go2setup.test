@@ -5,6 +5,7 @@ import sys
 import os
 
 import unittest2 as unittest
+import fs
 from fs.memoryfs import MemoryFS
 from pyDoubles.framework import *
 
@@ -28,11 +29,12 @@ class Test_setup(unittest.TestCase):
         config = go2.get_config([])
         config.fs = self.fs
         go2.config = config
+        go2.ResourceNotFoundError = fs.ResourceNotFoundError
 
         os.chdir(go2.USERDIR)
 
     def test_bashrc_missing(self):
-        self.assertEquals(go2.go2setup(), None)
+        go2.go2setup()
         self.assert_(go2.ACTIVATION_CMD in self.fs.getcontents(BASHRC))
 
     def test_bashrc_exists(self):

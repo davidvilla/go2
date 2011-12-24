@@ -165,7 +165,7 @@ class Test_PathBuffer(TestCase):
     def test_add_alternate(self):
         # given
         menu = empty_mock()
-        expect_call(menu.add_separator)
+        expect_call(menu.next_group)
         expect_call(menu.add_entry).with_args(self.path)
         sut = go2.PathBuffer(menu)
 
@@ -321,13 +321,13 @@ class Test_Menu(TestCase):
 
         self.assertIn('foo', sut.entries)
 
-    def test_FullMenuException(self):
+    def test_FullSinkException(self):
         # given
         sut = self.new_menu(max_size=1)
 
         # when/then
         sut.add_entry('foo')
-        with self.assertRaises(go2.Menu.FullMenuException):
+        with self.assertRaises(go2.Menu.FullSinkException):
             sut.add_entry('bar')
 
         self.assert_(sut.is_full)
@@ -404,7 +404,7 @@ class Test_Menu(TestCase):
         # then
 #        assert_that_was_called(self.reactor_spy.quit)
 
-    def FIXME_test_separators(self):
+    def FIXME_test_groups(self):
         pass
 
 

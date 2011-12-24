@@ -1,7 +1,13 @@
+Release 1.20111223
+
+* new --list-only command line argument
+* new --cwd command line argument
+
+
 Release 1.20111219
 ------------------
 
-* OSFS fake to reduce initialization time 
+* OSFS fake to reduce initialization time
 
 
 Release 1.20111216
