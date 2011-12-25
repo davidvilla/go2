@@ -15,15 +15,14 @@ from go2 import MatchLevel as Level
 
 
 class Test_match(unittest.TestCase):
-    def setUp(self):
-        self.config = go2.get_config([])
-        go2.config = self.config
-
+#    def setUp(self):
+#        self.config = go2.get_config([])
+#        go2.config = self.config
 
     def assert_match(self, pattern, result, paths):
-        self.config.pattern = pattern
+        matcher = go2.PathMatcher(pattern)
         for p in paths:
-            self.assertEquals(go2.match(p), result)
+            self.assertEquals(matcher.match(p), result)
 
     def test_single(self):
         self.assert_match(
@@ -119,29 +118,35 @@ class Test_high_pattern(unittest.TestCase):
         go2.config = self.config
 
     def test_single(self):
-        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/stow'),
+        matcher = go2.PathMatcher(['sto'])
+        self.assertEquals(matcher.high_pattern('/usr/local/stow'),
                           '/usr/local/[sto]w')
 
-        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/stow-1/stow-2'),
+        self.assertEquals(matcher.high_pattern('/usr/local/stow-1/stow-2'),
                           '/usr/local/stow-1/[sto]w-2')
 
     def test_single_ignorecase(self):
-        self.assertEquals(go2.high_pattern(['STO'], '/usr/mostow/local/stow'),
+        matcher = go2.PathMatcher(['STO'])
+        self.assertEquals(matcher.high_pattern('/usr/mostow/local/stow'),
                           '/usr/mostow/local/[sto]w')
 
-        self.assertEquals(go2.high_pattern(['sto'], '/usr/local/STOW'),
+        matcher = go2.PathMatcher(['sto'])
+        self.assertEquals(matcher.high_pattern('/usr/local/STOW'),
                           '/usr/local/[STO]W')
 
     def test_single_contains(self):
-        self.assertEquals(go2.high_pattern(['tow'], '/usr/mostow/local/stow'),
+        matcher = go2.PathMatcher(['tow'])
+        self.assertEquals(matcher.high_pattern('/usr/mostow/local/stow'),
                           '/usr/mostow/local/s[tow]')
 
     def test_multi(self):
-        self.assertEquals(go2.high_pattern(['shar', 'sto'], '/usr/share/local/stow'),
+        matcher = go2.PathMatcher(['shar', 'sto'])
+        self.assertEquals(matcher.high_pattern('/usr/share/local/stow'),
                           '/usr/[shar]e/local/[sto]w')
 
     def test_multi_contains(self):
-        self.assertEquals(go2.high_pattern(['hare', 'tow'], '/usr/shares/local/stows'),
+        matcher = go2.PathMatcher(['hare', 'tow'])
+        self.assertEquals(matcher.high_pattern('/usr/shares/local/stows'),
                           '/usr/s[hare]s/local/s[tow]s')
 
 

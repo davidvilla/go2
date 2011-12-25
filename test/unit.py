@@ -282,11 +282,14 @@ class Test_from_file_provider(TestCase, PathFileHelper):
         StubFS.setUp(self)
 
     def test_search_existing(self):
-        sut = self.PathFileStore_with_content('paths')
-        go2.config.pattern = ['la']
+        # given
+        go2.config.matcher = go2.PathMatcher(['la'])
+        store = self.PathFileStore_with_content('paths')
 
-        paths = list(go2.from_file_provider(sut))
+        # whem
+        paths = list(go2.from_file_provider(store))
 
+        # then
         self.assertIn(go2.PathItem(u'/home/user/lab'), paths)
 
     def test_search_missing(self):

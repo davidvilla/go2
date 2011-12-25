@@ -19,6 +19,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
+VERSION = '1.20111224'
+
+DESCRIPTION = '''\
+go2 is a fast directory finder.
+
+This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
+go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See COPYING
+for details.'''
 
 import sys
 import os
@@ -69,8 +78,6 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 #GO2CONFIG  = os.path.join(GO2DIR, 'config')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
-
-VERSION = '1.20111224'
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
@@ -136,28 +143,12 @@ def high(text):
     return config.before + text + config.after
 
 
-def high_pattern(pattern, path):
-    retval = ''
-    begin = 0
-
-    re_str = pattern2re_contain(pattern)
-    mo = re.match(re_str, path, re.IGNORECASE)
-
-    for i in range(1, mo.lastindex + 1):
-        retval += mo.string[begin:mo.start(i)]
-        retval += config.before + mo.group(i) + config.after
-        begin = mo.end(i)
-
-    retval += mo.string[begin:]
-    return retval
-
-
 def abbreviate_home_prefix(path):
     return re.sub(u'^{0}'.format(USERDIR), '~', path)
 
 
-def highpath_formatter(index, path, suffix):
-    path = high_pattern(config.pattern, path)
+def high_pattern_formatter(index, path, suffix):
+    path = config.matcher.high_pattern(path)
     path = abbreviate_home_prefix(path)
     return u'\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
 
@@ -182,33 +173,48 @@ class MatchLevel:
     CONTAIN_IGNORECASE = 3
 
 
-def pattern2re_start(pattern):
-    return unicode.join(u'', [u'.*/({0})[^/]*'.format(x) for x in pattern]) + u'$'
+class PathMatcher(object):
+    def __init__(self, pattern):
+        # FIXME: precompute RE
+        self.re_start = self.pattern2re_start(pattern)
+        self.re_contain = self.pattern2re_contain(pattern)
 
+    def match(self, path):
+        if re.match(self.re_start, path, re.UNICODE):
+            return MatchLevel.START
 
-def pattern2re_contain(pattern):
-    return unicode.join(u'', [u'.*/.*({0})[^/]*'.format(x) for x in pattern]) + u'$'
+        if re.match(self.re_start, path, re.UNICODE | re.IGNORECASE):
+            return MatchLevel.START_IGNORECASE
 
+        if re.match(self.re_contain, path, re.UNICODE):
+            return MatchLevel.CONTAIN
 
-# FIXME: precompute RE
-def match(path):
-    re_str = pattern2re_start(config.pattern)
-#    print re_str, path
-#    print type(re_str), type(path)
-    if re.match(re_str, path, re.UNICODE):
-        return MatchLevel.START
+        if re.match(self.re_contain, path, re.UNICODE | re.IGNORECASE):
+            return MatchLevel.CONTAIN_IGNORECASE
 
-    if re.match(re_str, path, re.UNICODE | re.IGNORECASE):
-        return MatchLevel.START_IGNORECASE
+        return MatchLevel.NO_MATCH
 
-    re_str = pattern2re_contain(config.pattern)
-    if re.match(re_str, path, re.UNICODE):
-        return MatchLevel.CONTAIN
+    @staticmethod
+    def pattern2re_start(pattern):
+        return unicode.join(u'', [u'.*/({0})[^/]*'.format(x) for x in pattern]) + u'$'
 
-    if re.match(re_str, path, re.UNICODE | re.IGNORECASE):
-        return MatchLevel.CONTAIN_IGNORECASE
+    @staticmethod
+    def pattern2re_contain(pattern):
+        return unicode.join(u'', [u'.*/.*({0})[^/]*'.format(x) for x in pattern]) + u'$'
 
-    return MatchLevel.NO_MATCH
+    def high_pattern(self, path):
+        retval = ''
+        begin = 0
+
+        mo = re.match(self.re_contain, path, re.IGNORECASE)
+
+        for i in range(1, mo.lastindex + 1):
+            retval += mo.string[begin:mo.start(i)]
+            retval += config.before + mo.group(i) + config.after
+            begin = mo.end(i)
+
+        retval += mo.string[begin:]
+        return retval
 
 
 def save_target(path):
@@ -276,7 +282,6 @@ class PathFileStore:
         return self
 
     def save(self):
-#        print "=", self.data
         with config.fs.open(self.path, 'w') as fd:
             for path, visits in self.data.items()[:self.size]:
                 line = u"{0}:{1}\n".format(visits, path)
@@ -292,7 +297,7 @@ def save_in_history(path):
 
 def from_file_provider(path_store):
     for path in path_store:
-        level = match(path)
+        level = config.matcher.match(path)
         if level == MatchLevel.NO_MATCH:
             continue
 
@@ -368,7 +373,7 @@ class CommandProvider:
 
                 path = path.strip()
 
-                level = match(path)
+                level = config.matcher.match(path)
                 if level == MatchLevel.NO_MATCH:
                     continue
 
@@ -761,6 +766,7 @@ class Go2Base(object):
 
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
+        self.reactor.timeout_add(250, self.end_checker)
 
     def setup_ignore(self):
         try:
@@ -790,11 +796,15 @@ class Go2Base(object):
         return retval
 
     def create_tasks(self):
+        self.create_file_tasks()
+        self.create_command_tasks()
+
+    def create_file_tasks(self):
         self.pool.add_task(from_file_provider, self.history)
         self.pool.sleep_free_workers(seconds=1)
-
         self.pool.add_task(from_file_provider, self.cache)
 
+    def create_command_tasks(self):
         paths = ListUniq()
         paths.extend([os.getcwd(), USERDIR])
 #        paths.extend(self.not_overlapped_history())
@@ -808,6 +818,9 @@ class Go2Base(object):
 
             self.pool.add_task(tree_provider, path)
 
+    def end_checker(self):
+        return False
+
     def on_success(self):
         pass
 
@@ -816,13 +829,12 @@ class Go2Interactive(Go2Base):
     def __init__(self):
         Go2Base.__init__(self)
         self.menu = Menu(self.reactor, sys.stdout)
-        self.menu.formatter = highpath_formatter
+        self.menu.formatter = high_pattern_formatter
         self.path_buffer.set_sink(self.menu)
         self.tty = TTY()
 
         self.tty.set_raw()
         self.reactor.io_add_watch(sys.stdin, self.menu.input_handler)
-        self.reactor.timeout_add(250, self.end_checker)
         self.reactor.at_quit(self.tty.restore)
 
         self.progress = cycle(range(4))
@@ -854,11 +866,12 @@ class Go2Interactive(Go2Base):
     def on_success(self):
         rprint(u"Changing to: {0}\n".format(
                 high(abbreviate_home_prefix(self.menu.target))))
+
         save_target(self.menu.target)
 
         self.history.add_visit(self.menu.target).save()
-
         logging.debug("Saved history %s", len(self.menu.entries))
+
         self.cache.add_visit_seq(self.menu.entries).save()
 
 
@@ -866,7 +879,6 @@ class Go2ListOnly(Go2Base):
     def __init__(self):
         Go2Base.__init__(self)
         self.path_buffer.set_sink(PrintSink())
-        self.reactor.timeout_add(250, self.end_checker)
 
     def end_checker(self):
         if not self.pool.has_tasks():
@@ -937,13 +949,7 @@ def get_config(args=None):
 
     parser = argparse.ArgumentParser(
         prog = 'go2',
-        description = '''\
-go2 is a fast directory finder.
-
-This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
-go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
-are welcome to redistribute it under certain conditions; See COPYING
-for details.'''.format(VERSION),
+        description = DESCRIPTION.format(VERSION),
         epilog = '.',
         formatter_class = argparse.RawDescriptionHelpFormatter)
 
@@ -981,6 +987,8 @@ for details.'''.format(VERSION),
 #    print retval.pattern
 
     # application globals
+    retval.matcher = PathMatcher(retval.pattern)
+
     retval.fs = OSFS('/')
     retval.fs.makedir(GO2DIR, allow_recreate=True)
 
