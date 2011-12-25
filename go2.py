@@ -48,6 +48,7 @@ import subprocess as subp
 import shlex
 from traceback import print_exc
 from itertools import cycle
+from fnmatch import fnmatch
 
 import gobject
 import argparse
@@ -726,7 +727,15 @@ class Menu(Sink):
 
 class IgnoreManager(object):
     def __init__(self, content):
-        self.ignored_names = [x.strip() for x in content.split()]
+        self.patterns = []
+        for line in content.split():
+            line = line.strip()
+            if not os.sep in line:
+                line = '*/{0}/*'.format(line)
+
+            self.patterns.append(line)
+
+        print self.patterns
 
     @classmethod
     def from_file(cls, fname):
@@ -734,9 +743,13 @@ class IgnoreManager(object):
 
     def is_ignored(self, path):
         assert path.startswith(os.sep), "It must be an absolute path"
-        retval = any(x in self.ignored_names for x in path.split(os.sep))
+
+        path = os.path.normpath(path) + os.sep
+
+        retval = any(fnmatch(path, x) for x in self.patterns)
         if retval:
             logging.debug("Ignored: %s", path)
+
         return retval
 
 

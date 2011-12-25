@@ -424,12 +424,8 @@ class TestIgnore(TestCase):
 foo
 bar''')
 
-        # when
-        foo = sut.is_ignored("/home/foo")
-        bar = sut.is_ignored("/home/bar")
-
-        # then
-        self.assert_(foo and bar)
+        self.assert_(sut.is_ignored("/home/foo"))
+        self.assert_(sut.is_ignored("/home/bar"))
 
     def test_not_matching_path(self):
         sut = self.create_manager("foo")
@@ -448,6 +444,15 @@ bar''')
 
         self.assertFalse(
             sut.is_ignored('/usr/xxfoo'))
+
+        self.assertFalse(
+            sut.is_ignored('/usr/fooxx'))
+
+    def test_absolute_dir(self):
+        sut = self.create_manager('/usr/local/*')
+
+        self.assert_(sut.is_ignored('/usr/local/foo'))
+        self.assert_(sut.is_ignored('/usr/local'))
 
     def test_from_file__missing_file(self):
         # given
