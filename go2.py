@@ -735,8 +735,6 @@ class IgnoreManager(object):
 
             self.patterns.append(line)
 
-        print self.patterns
-
     @classmethod
     def from_file(cls, fname):
         return IgnoreManager(config.fs.getcontents(fname))
