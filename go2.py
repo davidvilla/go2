@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '1.20111224'
+VERSION = '1.20111228'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
@@ -70,6 +70,7 @@ HIGH = chr(27) + '[1m'
 LOW  = chr(27) + '[m'
 
 
+CWD        = os.getcwd()
 USERDIR    = os.environ['HOME']
 GO2DIR     = os.path.join(USERDIR, '.go2')
 GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
@@ -288,7 +289,10 @@ class PathFileStore:
                 fd.write(line.encode('utf8'))
 
     def __unicode__(self):
-        return "<PathFileStore {0}>".format(self.path)
+        return "<PathFileStore '{0}'>".format(self.path)
+
+    def __repr__(self):
+        return unicode(self).encode(config.encoding)
 
 
 def save_in_history(path):
@@ -389,8 +393,13 @@ class CommandProvider:
         return "CommandProvider pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
 
 
-def tree_provider(root):
-    return CommandProvider('tree -dfin --noreport %s' % root)
+def tree_provider(path):
+    path = os.path.abspath(path)
+
+    if not config.fs.isdir(path):
+        message("'{0}' does not exist".format(path))
+
+    return CommandProvider('tree -dfin --noreport %s' % path)
 
 
 class CancelException(Go2Exception):
@@ -463,6 +472,7 @@ class ProcessPool(object):
                         for x in range(num_workers)]
 
     def add_task(self, func, *args):
+        logging.info('new task for: %s%s', func.__name__, args)
         self.task_queue.put((func, args))
 
     def sleep_free_workers(self, seconds):
@@ -574,6 +584,9 @@ class QueueReactor(gobject.MainLoop):
     def quit(self):
         logging.debug('reactor quit')
         gobject.MainLoop.quit(self)
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 
 class PathBuffer(object):
@@ -700,7 +713,7 @@ class Menu(Sink):
         self.reactor.quit()
 
     def next_group(self):
-        self.out_write('\r   ···        \n')
+        self.out_write('\r   ---        \n')
 
     def add_entry(self, entry):
         if len(self.entries) >= self.max_size:
@@ -801,21 +814,14 @@ class Go2Base(object):
 
     def create_file_tasks(self):
         self.pool.add_task(from_file_provider, self.history)
-        self.pool.sleep_free_workers(seconds=1)
+        self.pool.sleep_free_workers(seconds=0.5)
         self.pool.add_task(from_file_provider, self.cache)
 
     def create_command_tasks(self):
-        paths = ListUniq()
-        paths.extend([os.getcwd(), USERDIR])
+        paths = ListUniq(config.search_path.split(':'))
 #        paths.extend(self.not_overlapped_history())
 
-        if config.from_root:
-            paths.append('/')
-
         for path in paths:
-            if not config.fs.isdir(path):
-                message("'{0}' does not exist".format(path))
-
             self.pool.add_task(tree_provider, path)
 
     def end_checker(self):
@@ -954,22 +960,24 @@ def get_config(args=None):
         formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('pattern', nargs='*', help="pattern to find")
-    parser.add_argument('--cwd', metavar='DIR', default=None,
-                        help="change current directory to DIR")
     parser.add_argument('--cd', dest='chdir', action="store_true",
                         help="'cd' alias with caching")
     parser.add_argument('-i', '--ignore-case', dest='ignorecase',
                         action='store_true', default=False,
                         help="ignore case search")
     parser.add_argument('-l', '--list-only', dest='listonly', action='store_true',
-                        help="list matches only")
+                        help="list matches and exits")
+    parser.add_argument('-p', '--path', metavar='PATH', dest='search_path',
+                        default="{0}:{1}".format(CWD, USERDIR),
+                        help='set search path (default: "./:{0}")'.format(USERDIR))
     parser.add_argument('-r', '--from-root', dest='from_root',
                         action='store_true',
-                        help="search in whole file system")
+                        help="add / to the search path")
+    parser.add_argument('-v', '--version', action='version',
+                        version='%(prog)s ' + VERSION)
     parser.add_argument('--setup',
                         action='store_true',
                         help="install go2 in your .bashrc")
-    parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 
     retval = parser.parse_args(args)
     retval.parser = parser
@@ -985,6 +993,9 @@ def get_config(args=None):
 
 #    retval.apply_case = str.lower if retval.ignorecase else str
 #    print retval.pattern
+
+    if retval.from_root:
+        retval.search_path += ':/'
 
     # application globals
     retval.matcher = PathMatcher(retval.pattern)
@@ -1009,13 +1020,6 @@ if __name__ == '__main__':
             sys.exit(chdir_decorator())
         except NotExistsException, target:
             sys.exit(create_directory_wizzard(target.args[0]))
-
-    if config.cwd:
-        try:
-            os.chdir(config.cwd)
-        except OSError:
-            message("'{0}' does not exist".format(config.cwd))
-            sys.exit(1)
 
     if not config.pattern:
         print("go2.py: error: too few arguments\n")

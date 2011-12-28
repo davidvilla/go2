@@ -1,4 +1,11 @@
 Release 1.20111223
+------------------
+
+* removed --cwd
+* new --path command line argument
+
+Release 1.20111223
+------------------
 
 * new --list-only command line argument
 * new --cwd command line argument
