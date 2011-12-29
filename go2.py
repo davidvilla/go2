@@ -1026,4 +1026,5 @@ if __name__ == '__main__':
         config.parser.print_help()
         sys.exit(1)
 
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     sys.exit(config.engine().run())
