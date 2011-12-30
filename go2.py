@@ -646,8 +646,10 @@ class PathBuffer(object):
 
 
 class Sink(object):
-
     class FullSinkException(Go2Exception):
+        pass
+
+    class InvalidChoiceException(Go2Exception):
         pass
 
     def add_entry(self, path):
@@ -659,14 +661,10 @@ class Sink(object):
 
 class PrintSink(Sink):
     def add_entry(self, path):
-        print path
+        rprint(path + '\n\r')
 
 
 class Menu(Sink):
-
-    class InvalidChoiceException(Go2Exception):
-        pass
-
     def __init__(self, reactor, out, max_size=26):
         self.reactor = reactor
         self.fd = out
@@ -676,41 +674,18 @@ class Menu(Sink):
         self.target = None
         self.formatter = self.default_formatter
 
-    def input_handler(self, fd, condition=None):
-        key = ord(fd.read(1))
-#        key = os.read(fd, 1)
-#        print key
-
-        if key in [ESC, CTRL_C]:
-            raise CancelException
-
-        try:
-            choice = self.key2choice(key)
-            logging.debug("choice: {0}, entries: {1}".format(
-                    choice, self.entries))
-        except self.InvalidChoiceException:
-            return True
-
-        self.perform_choice(choice)
-        return False
-
-    def key2choice(self, key):
-        if key == ENTER:
-            choice = 0
-        else:
-            choice = key - ord('a')
-
+    def perform_choice(self, choice):
         if not self.is_valid_choice(choice):
             raise self.InvalidChoiceException()
 
-        return choice
+        logging.debug("choice: {0}, entries: {1}".format(
+                choice, self.entries))
+
+        self.target = self.entries[choice]
+        self.reactor.quit()
 
     def is_valid_choice(self, choice):
         return choice in range(0, len(self.entries))
-
-    def perform_choice(self, choice):
-        self.target = self.entries[choice]
-        self.reactor.quit()
 
     def next_group(self):
         self.out_write('\r   ---        \n')
@@ -741,6 +716,42 @@ class Menu(Sink):
     def out_write(self, text):
         self.fd.write(text)
         self.fd.flush()
+
+
+def user_break_checker(key):
+    if key in [ESC, CTRL_C]:
+        raise CancelException
+
+
+class UserInputHandler(object):
+    def __call__(self, fd, condition=None):
+        key = ord(fd.read(1))
+        user_break_checker(key)
+        return True
+
+
+class UserChoiceHandler(object):
+    def __init__(self, sink):
+        self.sink = sink
+
+    def __call__(self, fd, condition=None):
+        key = ord(fd.read(1))
+#        key = os.read(fd, 1)
+        user_break_checker(key)
+
+        try:
+            choice = self.key2choice(key)
+            self.sink.perform_choice(choice)
+        except Sink.InvalidChoiceException:
+            return True
+
+        return False
+
+    def key2choice(self, key):
+        if key == ENTER:
+            return 0
+
+        return key - ord('a')
 
 
 class IgnoreManager(object):
@@ -776,6 +787,7 @@ class Go2Base(object):
         self.path_buffer = PathBuffer()
 
         self.setup_ignore()
+        self.setup_tty()
 
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
@@ -787,6 +799,11 @@ class Go2Base(object):
             self.path_buffer.add_filter(ignore_manager.is_ignored)
         except ResourceNotFoundError:
             pass
+
+    def setup_tty(self):
+        tty = TTY()
+        tty.set_raw()
+        self.reactor.at_quit(tty.restore)
 
     def run(self):
         retval = 1
@@ -837,11 +854,8 @@ class Go2Interactive(Go2Base):
         self.menu = Menu(self.reactor, sys.stdout)
         self.menu.formatter = high_pattern_formatter
         self.path_buffer.set_sink(self.menu)
-        self.tty = TTY()
 
-        self.tty.set_raw()
-        self.reactor.io_add_watch(sys.stdin, self.menu.input_handler)
-        self.reactor.at_quit(self.tty.restore)
+        self.reactor.io_add_watch(sys.stdin, UserChoiceHandler(self.menu))
 
         self.progress = cycle(range(4))
 
@@ -885,6 +899,7 @@ class Go2ListOnly(Go2Base):
     def __init__(self):
         Go2Base.__init__(self)
         self.path_buffer.set_sink(PrintSink())
+        self.reactor.io_add_watch(sys.stdin, UserInputHandler())
 
     def end_checker(self):
         if not self.pool.has_tasks():

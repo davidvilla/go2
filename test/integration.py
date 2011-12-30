@@ -38,6 +38,7 @@ class Test_Search(unittest.TestCase):
 
         self.reactor = go2.QueueReactor()
         self.menu = go2.Menu(self.reactor, self.out, max_size=menu_size)
+        self.input_handler = go2.UserChoiceHandler(self.menu)
 
         self.path_buffer = go2.PathBuffer(self.menu)
 
@@ -46,7 +47,7 @@ class Test_Search(unittest.TestCase):
             go2.QueueExtractor(self.path_buffer.add))
 
     def register_input(self):
-        self.reactor.io_add_watch(self.read_end, self.menu.input_handler)
+        self.reactor.io_add_watch(self.read_end, self.input_handler)
 
     def put(self, path):
         self.queue.put(go2.PathItem(path))

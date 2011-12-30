@@ -312,11 +312,6 @@ class Test_Menu(TestCase):
         params.update(kargs)
         return go2.Menu(**params)
 
-    def input_stub(self, key):
-        retval = empty_stub()
-        when(retval.read).then_return(key)
-        return retval
-
     def test_add_entry(self):
         sut = self.new_menu()
 
@@ -362,53 +357,53 @@ class Test_Menu(TestCase):
     def test_select_first_with_empty_menu(self):
         # given
         sut = self.new_menu()
-        fd = self.input_stub('a')
 
-        # when
-        sut.input_handler(fd)
-
-        # then
-        self.assertEquals(sut.target, None)
+        # when/then
+        with self.assertRaises(go2.Sink.InvalidChoiceException):
+            sut.perform_choice(0)
 
     def test_valid_key(self):
         # given
         sut = self.new_menu()
         sut.add_entry('foo')
-        fd = self.input_stub('a')
 
         # when
-        sut.input_handler(fd)
+        sut.perform_choice(0)
 
         # then
         self.assertEquals(sut.target, 'foo')
         assert_that_was_called(self.reactor_spy.quit)
 
-    def test_wrong_key_is_ignored(self):
+    def test_wrong_key_raises_invalid(self):
         # given
         sut = self.new_menu()
         sut.add_entry('foo')
-        fd = self.input_stub('b')
 
-        # when
-        sut.input_handler(fd)
+        # when/then
+        with self.assertRaises(go2.Sink.InvalidChoiceException):
+            sut.perform_choice(1)
 
-        # then
-        self.assertEquals(sut.target, None)
+    def FIXME_test_groups(self):
+        pass
+
+
+class Test_UserChoiceHanlder(TestCase):
+    def input_stub(self, key):
+        retval = empty_stub()
+        when(retval.read).then_return(key)
+        return retval
 
     def test_ESC_quit_reactor(self):
        # given
-        sut = self.new_menu()
+        sut = go2.UserInputHandler()
         fd = self.input_stub(chr(go2.ESC))
 
         # when/then
         with self.assertRaises(go2.CancelException):
-            sut.input_handler(fd)
+            sut(fd)
 
         # then
 #        assert_that_was_called(self.reactor_spy.quit)
-
-    def FIXME_test_groups(self):
-        pass
 
 
 class TestIgnore(TestCase):

@@ -1,3 +1,9 @@
+Release 1.20111230
+------------------
+
+* Refactoring: new classes UserInputHandler and UserChoiceHandler
+
+
 Release 1.20111223
 ------------------
 
