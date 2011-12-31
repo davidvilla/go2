@@ -1,10 +1,9 @@
-#!/usr/bin/python -u
-# -*- coding: utf-8 -*-
+#!/usr/bin/python
+# -*- coding:utf-8; tab-width:4; mode:python -*-
 
 # go2.py
 #
-# Copyright © 2004,2005,2006,2007,2008,2009,2010 David Villa Alises
-#
+# Copyright © 2004-2011 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,1458 +19,1027 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
+VERSION = '1.20111228'
 
-import os, sys
+DESCRIPTION = '''\
+go2 is a fast directory finder.
+
+This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
+go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See COPYING
+for details.'''
+
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 try:
     sys.path.remove(os.getcwd())
 except (OSError, ValueError):
     pass
 
-import tty, termios, select, re
-import thread, threading
-import subprocess
-import signal
-import string
+#os.environ['LANG'] = 'C'
+
+import pwd
+import tty
+import termios
 import time
+import signal
+import re
 import logging
-import optparse
-import itertools
-import collections
+import locale
 
-os.environ['LANG'] = 'C'
+from threading import Thread
+import multiprocessing as mp
+import multiprocessing.queues as mp_queues
+import subprocess as subp
+import shlex
+from traceback import print_exc
+from itertools import cycle
+from fnmatch import fnmatch
 
-VERSION = '0.'+'$Date$'[7:17].replace('-','')
+import gobject
+import argparse
+from osfs import OSFS, ResourceNotFoundError
 
 ESC = 27
 CTRL_C = 3
 ENTER = 13
+HIGH = chr(27) + '[1m'
+LOW  = chr(27) + '[m'
 
-#FILES
+
+CWD        = os.getcwd()
 USERDIR    = os.environ['HOME']
 GO2DIR     = os.path.join(USERDIR, '.go2')
-GO2INCLUDE = os.path.join(GO2DIR, 'include')
-GO2EXCLUDE = os.path.join(GO2DIR, 'exclude')
+GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE   = os.path.join(GO2DIR, 'cache')
-GO2CONFIG  = os.path.join(GO2DIR, 'config')
+#GO2CONFIG  = os.path.join(GO2DIR, 'config')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
-GO2GUI     = os.path.join(os.path.split(sys.argv[0])[0], 'go2.glade2')
-#GO2GUI = os.environ['HOME'] + '/repos/go2/trunk/go2.glade2'
+
+ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
+CD_MODE_CMD = "alias cd='go2 --cd'"
+
+STOP = 'STOP'
 
 
-# states
-WORKING, WAITING, CANCELED, \
-NOTFOUND, FINISH,  FULL,    NOTEXIST, SKIP = range(8)
+logging.basicConfig(
+    filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
+    filemode='w',
+    format='%(asctime)-15s %(message)s',
+    level=logging.DEBUG)
 
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+def to_unicode(text, encoding=None):
+    encoding = encoding or config.encoding
 
-class Singleton(type):
-    def __init__(cls, *args):
-        cls.__instance = None
-    def __call__(cls, *args, **kargs):
-        if not cls.__instance:
-            cls.__instance = type.__call__(cls, *args, **kargs)
-        return cls.__instance
+    if isinstance(text, unicode):
+        return text
+
+    return unicode(text, encoding=encoding, errors='replace')
 
 
-class Observable:
+class Go2Exception(Exception):
+    def __str__(self):
+        return repr(self)
+
+
+class PathItem:
+    def __init__(self, path, level=0):
+        self.path = to_unicode(path)
+        self.level = level
+
+    def __eq__(self, other):
+        return self.path == other.path and self.level == other.level
+
+
+def go2setup(mode='r+'):
+    try:
+        if ACTIVATION_CMD in config.fs.getcontents(
+            os.path.join(USERDIR, '.bashrc')):
+            print('go2 already configured, skipping.')
+            return 1
+
+    except ResourceNotFoundError:
+        pass
+
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'w') as fd:
+        fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
+        print('Setting up go2. It will be ready in next shell session.')
+
+
+def rprint(text=''):
+    sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
+    sys.stdout.flush()
+
+
+def message(text):
+    rprint("({0})\n".format(text))
+
+
+def high(text):
+    return config.before + text + config.after
+
+
+def abbreviate_home_prefix(path):
+    return re.sub(u'^{0}'.format(USERDIR), '~', path)
+
+
+def high_pattern_formatter(index, path, suffix):
+    path = config.matcher.high_pattern(path)
+    path = abbreviate_home_prefix(path)
+    return u'\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
+
+
+class ListUniq(list):
+    def append(self, item):
+        if item in self:
+            return
+
+        list.append(self, item)
+
+    def extend(self, other):
+        for item in other:
+            self.append(item)
+
+
+class MatchLevel:
+    NO_MATCH = -1
+    START = 0
+    START_IGNORECASE = 1
+    CONTAIN = 2
+    CONTAIN_IGNORECASE = 3
+
+
+class PathMatcher(object):
+    def __init__(self, pattern):
+        # FIXME: precompute RE
+        self.re_start = self.pattern2re_start(pattern)
+        self.re_contain = self.pattern2re_contain(pattern)
+
+    def match(self, path):
+        if re.match(self.re_start, path, re.UNICODE):
+            return MatchLevel.START
+
+        if re.match(self.re_start, path, re.UNICODE | re.IGNORECASE):
+            return MatchLevel.START_IGNORECASE
+
+        if re.match(self.re_contain, path, re.UNICODE):
+            return MatchLevel.CONTAIN
+
+        if re.match(self.re_contain, path, re.UNICODE | re.IGNORECASE):
+            return MatchLevel.CONTAIN_IGNORECASE
+
+        return MatchLevel.NO_MATCH
+
+    @staticmethod
+    def pattern2re_start(pattern):
+        return unicode.join(u'', [u'.*/({0})[^/]*'.format(x) for x in pattern]) + u'$'
+
+    @staticmethod
+    def pattern2re_contain(pattern):
+        return unicode.join(u'', [u'.*/.*({0})[^/]*'.format(x) for x in pattern]) + u'$'
+
+    def high_pattern(self, path):
+        retval = ''
+        begin = 0
+
+        mo = re.match(self.re_contain, path, re.IGNORECASE)
+
+        for i in range(1, mo.lastindex + 1):
+            retval += mo.string[begin:mo.start(i)]
+            retval += config.before + mo.group(i) + config.after
+            begin = mo.end(i)
+
+        retval += mo.string[begin:]
+        return retval
+
+
+def save_target(path):
+    config.fs.setcontents(GO2TMP, path.encode(config.encoding))
+
+
+class PathFileStore:
+    "Manage a file holding a path set"
+
+    def __init__(self, path, size=1000):
+        self.path = path
+        self.size = size
+        self.data = {}
+        self.load()
+#        self.log = logging.getLogger('PathFileStore [%s]' % os.path.split(path)[-1])
+
+    def load(self):
+        try:
+            with config.fs.open(self.path) as fd:
+                self._load_file_lines(fd)
+
+        except ResourceNotFoundError:
+            pass
+
+    def _load_file_lines(self, fd):
+        def decode(path):
+            return path.strip().decode('utf8')
+
+        for line in fd:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                visits, path = line.split(':', 1)
+            except ValueError:
+                visits, path = 1, line
+
+            try:
+                self.data[decode(path)] = int(visits)
+            except UnicodeDecodeError:
+                continue
+
+    def __iter__(self):
+        def _cmp(p1, p2):
+            retval = -cmp(p1[1], p2[1])
+            if retval == 0:
+                return cmp(p1[0], p2[0])
+
+            return retval
+
+        for path, visits in sorted(self.data.items(), cmp=_cmp):
+            yield path
+
+    def add_visit_seq(self, seq):
+        assert isinstance(seq, list)
+        for path in seq:
+            self.add_visit(path)
+        return self
+
+    def add_visit(self, path):
+        assert isinstance(path, unicode), path
+        visits = self.data.get(path, 0)
+        self.data[path] = visits + 1
+        return self
+
+    def save(self):
+        with config.fs.open(self.path, 'w') as fd:
+            for path, visits in self.data.items()[:self.size]:
+                line = u"{0}:{1}\n".format(visits, path)
+                fd.write(line.encode('utf8'))
+
+    def __unicode__(self):
+        return "<PathFileStore '{0}'>".format(self.path)
+
+    def __repr__(self):
+        return unicode(self).encode(config.encoding)
+
+
+def save_in_history(path):
+    PathFileStore(GO2HISTORY).add_visit(path).save()
+
+
+def from_file_provider(path_store):
+    for path in path_store:
+        level = config.matcher.match(path)
+        if level == MatchLevel.NO_MATCH:
+            continue
+
+        if not config.fs.exists(path):
+            del path_store.data[path]
+            continue
+
+        yield PathItem(path, level)
+
+
+class CommandProvider:
+    def __init__(self, command):
+        self.command = command
+
+        self.ps = subp.Popen(
+            shlex.split(command),
+            bufsize    = 0,
+            shell      = False,
+            close_fds  = True,
+            stdout     = subp.PIPE,
+            stderr     = subp.PIPE,
+            preexec_fn = os.setsid)
+
+        logging.info('%s: starts', self)
+
+        self.abort = False
+        signal.signal(signal.SIGTERM, self.terminate)
+
+#    def is_alive2(self):
+#        try:
+#            self.ps.send_signal(0)
+#        except OSError:
+#            return False
+#
+#        return True
+
+    def is_alive(self):
+#        return self.ps.poll() is None
+        value = os.waitpid(self.ps.pid, os.WNOHANG)
+        logging.debug('%s: waitpid %s ', self, value)
+        return value == (0, 0)
+#        return os.waitpid(self.ps.pid, os.WNOHANG) == (0, 0)
+
+    def terminate(self, *args):
+        if self.abort:
+            return
+
+        self.abort = True
+        logging.info('%s: terminate', self)
+
+        try:
+            self.ps.send_signal(signal.SIGTERM)
+#            os.killpg(self.ps.pid, signal.SIGTERM)
+            time.sleep(0.15)
+
+            while self.is_alive():
+                logging.info('%s: SIGKILLed', self)
+                self.ps.send_signal(signal.SIGKILL)
+#                os.killpg(self.ps.pid, signal.SIGKILL)
+                time.sleep(0.1)
+
+        except OSError, e:
+            logging.error('%s: %s', self, e)
+
+        # WARN: This kills the worker running this provider
+        sys.exit()
+
+    def __iter__(self):
+        try:
+            for path in self.ps.stdout:
+                if self.abort:
+                    return
+
+                path = path.strip()
+
+                level = config.matcher.match(path)
+                if level == MatchLevel.NO_MATCH:
+                    continue
+
+                if not config.fs.exists(path):
+                    continue
+
+                yield PathItem(path, level)
+
+        except IOError:
+            self.terminate()
+
+    def __str__(self):
+        return "CommandProvider pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
+
+
+def tree_provider(path):
+    path = os.path.abspath(path)
+
+    if not config.fs.isdir(path):
+        message("'{0}' does not exist".format(path))
+
+    return CommandProvider('tree -dfin --noreport %s' % path)
+
+
+class CancelException(Go2Exception):
+    pass
+
+
+class NotMatchException(Go2Exception):
+    pass
+
+
+class NotExistsException(Go2Exception):
+    pass
+
+
+class NothingToDoException(Go2Exception):
+    pass
+
+
+class TTY:
     def __init__(self):
-        self.__observers = []
+        self.old_settings = tty.tcgetattr(sys.stdin)
 
-    def attach(self, cb):
-        self.__observers.append(cb)
+    def set_raw(self):
+        tty.setraw(sys.stdin)
 
-    def detach(self, cb):
-        self.__observers.remove(cb)
-
-    def notify(self, val):
-        for f in self.__observers:
-            f(val)
-
-
-def rprint(cad):
-    print '\r' + cad,
-
-
-#-- path checkers
-def hidden(path):
-    return (os.sep + '.') in path
-
-def is_mine(path):
-    return path.startswith(USERDIR)
-
-#--
-
-def filterout_hidden(pathlist):
-    return [x for x in pathlist if not hidden(x)]
-
-def match_single(path):
-    path = config.apply_case(path)
-    return os.path.basename(path).startswith(config.pattern[0])
-
-def match_multi(path):
-    path = config.apply_case(path)
-
-    pattern = config.pattern
-    items = path.split(os.sep)[1:]
-
-    match = items[-1].startswith(pattern[-1])
-    if not match: return False
-
-    p = len(pattern) - 2
-    for i in items[-2::-1]:
-        if p < 0: return True
-        if i.startswith(pattern[p]): p -= 1
-
-    return False
-
-
-def highlight(pattern, path, before, after, flags=0):
-    items = path.split(os.sep)
-
-    p = len(pattern) - 1
-    for i in range(len(items)-1,-1,-1):
-        if p < 0: break
-        if config.apply_case(items[i]).startswith(config.apply_case(pattern[p])):
-            orig = items[i][:len(pattern[p])]
-            items[i] = items[i].replace(orig,
-                                        before + orig + after, 1)
-            p -= 1
-
-    return os.sep.join(items)
-
-
-# write selected dirname to file
-def saveTarget(dirname):
-    fd = open(GO2TMP, 'w')
-    fd.write(dirname)
-    fd.close()
-
-def save_in_history(dirname):
-    hist = PathFile(GO2HISTORY)
-    hist.insert(dirname)
-    hist.commit()
-
-
-class PathAsserts:
-    "Delegate for path test functions"
-    def __init__(self):
-        self.filters = []
-
-    def add(self, func):
-        self.filters.append(func)
-
-    def __call__(self, path):
-        for f in self.filters:
-            if f(path): return True
-
-        return False
-
-
-
-class ConsoleUI(threading.Thread):
-
-    HIGH = chr(27)+'[1m'
-    LOW = chr(27)+'[m'
-
-    maxItem = 26
-
-    def __init__(self, manager):
-	threading.Thread.__init__(self, name='ConsoleUI')
-        self.__mgr = manager
-	self.__matches = 0
-        self.__state = WORKING
-        self.__last = 0
-        self.__index = ord('a')
-        self.__clean_prompt = len('Select a path:  ') * ' '
-        self.log = logging.getLogger('ConsoleUI')
-
-        if not config.list_only:
-            self.__mgr.state_attach(self)
-
-        self.__mgr.path_attach(self)
-
-    @classmethod
-    def high(cls, text):
-        return cls.HIGH + text + cls.LOW
-
-    def __del__(self):
-	pass #self.ttyrestore()
-
-    def ttyrestore(self):
+    def restore(self):
         tty.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
-    def run(self):
-        if config.list_only: return
 
-        self.old_settings = tty.tcgetattr(sys.stdin)
-        tty.setraw(sys.stdin)
-        po = select.poll()
-        po.register(sys.stdin, select.POLLIN)
-        election = None
-
-	while 1:
-            if len(po.poll(100)) == 0:
-                if self.__state == NOTFOUND:
-                    break
-
-                elif self.__state == WAITING and self.__matches == 1:
-                    key = ENTER
-
-                else:
-                    continue
-            else:
-                key = ord(sys.stdin.read(1))
-
-	    if key in [ESC, CTRL_C]:
-		election = None
-		break
-
-            if key == ENTER:
-                election = 0
-            else:
-                election = key - ord('a')
-
-	    if election in range(0, self.__matches):
-		break
-
-        self.ttyrestore()
-        self.__mgr.set_election(election)
-
-
-    def state_update(self, state):
-        self.__state = state
-
-	rprint (self.__clean_prompt)
-
-	if state == WAITING:
-	    rprint('Select a path: ')
-	elif state == CANCELED:
-	    rprint('Canceled by user')
-	elif state == NOTFOUND:
-            self.log.info("Pattern doesn't match")
-	    rprint("Pattern doesn't match\n\r")
-	elif state == FULL:
-            self.log.warning('Warning: Too many matches')
-	    rprint('Warning: Too many matches!\n')
-	elif state == FINISH:
-	    rprint("Changing to: %s%s%s\n" % \
-                    (self.HIGH, self.__mgr.dirname, self.LOW))
-	elif state == WORKING:
-            rprint('Searching...')
-        elif state == SKIP:
-            rprint("That's the current directory, nothing to be done\n")
-	else:
-	    logging.critical("Internal ERROR: unknown state '%d'\n" % state)
-
-
-    def path_update(self, path):
-        self.__matches += 1
-
-        if self.__matches > self.maxItem:
-            raise Manager.FullException
-
-        assert self.__state == WORKING
-
-        if config.list_only:
-            #rprint("%s\n" % path)
-            print(path)
-            return
-
-        msg = ''
-        if path == os.getcwd():
-            msg = ' (the current directory)'
-
-        if self.__matches == 1:
-            msg += ' [ENTER]'
-
-        path = highlight(config.pattern,
-                         path, self.HIGH, self.LOW).\
-                         replace(USERDIR, '~', 1)
-
-        rprint("%c: %s%s\n" % (chr(self.__index), path.ljust(16), msg))
-        rprint('\rSearching...')
-        self.__index += 1
-
-
-class PathList(Observable):
-
-    class AlreadyExistsException: pass
-    def __init__(self):
-        Observable.__init__(self)
-        self.data = []
-        self.delayed = []
-        self.log = logging.getLogger('PathList')
-        self.lock = threading.Lock()
-
-    def append_delayed(self, item):
-        if item not in self.delayed:
-            self.delayed.append(item)
-
-    def commit_delayed(self):
-        for i in self.delayed:
-            self.append(i)
-
-    def append(self, item):
-        if item in self.data:
-            raise self.AlreadyExistsException
-
-        self.log.debug("[%s]: %s" % (len(self), item))
-        self.lock.acquire()
-        self.data.append(item)
-        self.notify(item)
-        self.lock.release()
-
-    def __getitem__(self, index):
-        return self.data[index]
-
-    def __len__(self):
-        return len(self.data)
-
-
-def loadlines(fname):
-    if not os.path.exists(fname): return []
-
-    fd = open(fname)
-    lines = [i.strip() for i in fd.readlines()]
-    fd.close()
-    return [i for i in lines if i]
-
-
-class PathFile:
-    "Manage a file holding a path set"
-    def __init__(self, filename, size = 1000):
-        self.filename = filename
-        self.size = size
-        self.log = logging.getLogger('PathFile [%s]' % os.path.split(filename)[-1])
-        self.data = loadlines(filename)
-
-        if not config.process_hidden:
-            self.data = filterout_hidden(self.data)
-
-    def insert(self, item):
-        self.log.debug("   Saving to file: %s (%s)" % (item,
-                                                      str(len(self.data))))
-        if item in self.data: self.data.remove(item)
-        self.data.insert(0, item)
-
-    def commit(self):
-        fd = open(self.filename, 'w')
-        fd.write(string.join(self.data[:self.size],'\n') + '\n')
-        fd.close()
-
-
-class Worker(threading.Thread):
-
-    def __init__(self, manager, root, exclude):
-        threading.Thread.__init__(self, name = self.__class__.__name__)
-        self.mgr = manager
-        self.root = root
-        self.__exclude = exclude # lista de rutas excluidas
-        self.count = 0
-
-    def is_excluded(self, path):
-        # Comprueba que la ruta absoluta 'path' no está excluida
-        # FIXME: Comprobar también que el nombre de directorio no está
-        # excluido (ej .svn), es decir, rutas relativas
-        for p in self.__exclude:
-            if path.startswith(p): return True
-        return False
-
-    def notify(self, path):
-        self.count += 1
-        self.mgr.path_notify(path)
-
-
-class HistoryWorker(Worker):
-    "Search in directories selected at any time"
-
+class ThreadStarted(Thread):
     def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-        self.fname = kargs['fname']
-        self.drop = []
-        self.pFile = PathFile(self.fname)
-        self.log = logging.getLogger('History')
-        self.log.debug("[len:%s]" % len(self.pFile.data))
+        Thread.__init__(self, *args, **kargs)
+        self.start()
 
+
+class Worker(mp.Process):
+    def __init__(self, tasks, output):
+        self.tasks = tasks
+        self.output = output
+        mp.Process.__init__(self)
+        self.start()
 
     def run(self):
-        for i in self.pFile.data:
-            if self.mgr.stop.isSet(): return
+        for func, args in iter(self.tasks.get, STOP):
+            self.push(func(*args))
+            self.tasks.task_done()
 
-            self.log.debug (i)
-            if config.match_func(i):
-                if not os.path.exists(i):
-                    self.drop.append(i)
-                    continue
+        self.tasks.task_done()
 
-                if self.is_excluded(i): continue
-
-                self.notify(i)
-
-            if not config.history_mode:
-                self.mgr.add_work(i) # search in all historic paths
-
-
-    def state_update(self, state):
-        if state != FINISH: return
-        for i in self.drop:
-            self.pFile.data.remove(i)
-        self.pFile.insert(self.mgr.dirname)
-        self.pFile.commit()
-
-
-# save all directories that appears in any seach
-class CacheWorker(Worker):
-
-    def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-        self.fname = kargs['fname']
-        self.drop = []
-        self.pFile = PathFile(self.fname)
-        self.log = logging.getLogger('Cache')
-        self.log.debug("[New, len:%s]" % len(self.pFile.data))
-
-    def run(self):
-        for i in self.pFile.data:
-            if self.mgr.stop.isSet(): return
-
-            if config.match_func(i):
-                if not os.path.exists(i):
-                    self.drop.append(i)
-                    continue
-
-                if self.is_excluded(i): continue
-
-                self.notify(i)
-
-
-    def path_update(self, path):
-        self.pFile.insert(path)
-
-    def state_update(self, state):
-        if state in (FINISH, CANCELED):
-            for i in self.drop: self.pFile.data.remove(i)
-            if self.mgr.dirname in self.pFile.data:
-                self.pFile.data.remove(self.mgr.dirname)
-            self.pFile.commit()
-
-
-class CmdWorker(Worker):
-    "A worker that process the output of the given command"
-    def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-        self.name = self.__class__.__name__
-        self.log = logging.getLogger(self.name)
-        self.log.debug("[%s] New %s for '%s'" % \
-                           (id(self), self.name, self.root))
-        self.ps = None
-
-    def run(self, cmd):
-        self.ps = subprocess.Popen(cmd, shell=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                close_fds=True)
-
-        self.log.info('%s cmd[%s]: %s' % (self.name, self.ps.pid, cmd))
-
-        exclude = PathAsserts()
-        exclude.add(lambda x: not os.path.isdir(x))
-        if not config.process_hidden: exclude.add(hidden)
-        if not config.from_root:      exclude.add(lambda x: not is_mine(x))
-        exclude.add(self.is_excluded)
-        exclude.add(lambda x: not config.match_func(x))
-
-        for i in self.ps.stdout:
-            if self.mgr.stop.isSet():
-                if self.ps.pid:
-                    self.log.debug('Killing find %s' % self.ps.pid)
-                    os.kill(self.ps.pid, signal.SIGKILL)
-                break
-
-            i = os.path.abspath(i.strip('\n'))
-            self.log.debug(i)
-
-            if exclude(i): continue
-            self.notify(i)
-
-        self.mgr.state_detach(self)
-
-        self.ps.wait()
-
-    def state_update(self, state):
-        if self.ps is None: return
-        if state not in [CANCELED, FINISH]: return
-
-        self.log.debug('Killing %s %s at update()' % \
-                           (self.name, self.ps.pid))
+    def push(self, source):
         try:
-            os.kill(self.ps.pid, signal.SIGKILL)
-        except OSError, e:
-            rprint('\n %s %s \n' % (e, self.ps.pid))
+            for x in source:
+                self.output.put(x)
+        except TypeError:
+            self.output.put(source)
 
 
-class FindWorker(CmdWorker):
-    def run(self):
-        name = '-name'
-        if config.ignorecase:
-            name = '-iname '
-        cmd = 'find %s -type d %s "a%s*"' % \
-            (self.root, name, config.pattern[-1])
-
-        CmdWorker.run(self, cmd)
+class TaskQueue(mp_queues.JoinableQueue):
+    def unfinished_tasks_count(self):
+        return self._unfinished_tasks._semlock._get_value()
 
 
-class LocateWorker(CmdWorker):
-    "Parse locate output"
-    def run(self):
-        options = '-l 1000 -e -b '
-        if config.ignorecase:
-            options += '-i '
-        cmd = 'locate %s %s' % (options, config.pattern[0])
-        CmdWorker.run(self, cmd)
+class ProcessPool(object):
+    def __init__(self, num_workers=None):
+        self.task_queue = TaskQueue()
+        self.output_queue = mp.Queue()
 
+        num_workers = num_workers or mp.cpu_count()
+        self.workers = [Worker(self.task_queue, self.output_queue)
+                        for x in range(num_workers)]
 
-class TreeWorker(CmdWorker):
-    def run(self):
-        cmd = "tree -dfin --noreport %s" % self.root
-        CmdWorker.run(self, cmd)
+    def add_task(self, func, *args):
+        logging.info('new task for: %s%s', func.__name__, args)
+        self.task_queue.put((func, args))
 
+    def sleep_free_workers(self, seconds):
+        for i in range(len(self.workers) - self.task_queue.unfinished_tasks_count()):
+            self.add_task(time.sleep, seconds)
 
-#class LocateWorker2(Worker):
-#    "Parse locate output"
-#    def __init__(self, *args, **kargs):
-#        Worker.__init__(self, *args)
-#        self.log = logging.getLogger('Locate')
-#        self.log.debug("[New]")
-#
-#    def run(self):
-#        options = '-l 1000 -e -b '
-#        if Config().ignorecase:
-#            options += '-i '
-#        cmd = 'locate %s %s' % (options, Config().pattern[0])
-#        self.log.debug('locate cmd: %s' % cmd)
-#
-#        locate = subprocess.Popen(cmd, shell=True,
-#                                  stdout=subprocess.PIPE,
-#                                  stderr=subprocess.PIPE,
-#                                  close_fds=True)
-#
-#        exclude = PathAsserts()
-#        exclude.add(lambda x: not os.path.isdir(x))
-#        if not Config().process_hidden: exclude.add(hidden)
-#        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
-#        exclude.add(self.is_excluded)
-#        exclude.add(lambda x: not Config().match_func(x))
-#
-#        for i in locate.stdout:
-#            if self.mgr.stop.isSet():
-#                os.kill(locate.pid, signal.SIGKILL)
-#                return
-#
-#            i = i.strip('\n')
-#            self.log.debug(i)
-#
-#            if not exclude(i):
-#                self.mgr.path_notify(i)
-#
-#
-#class FindWorker2(Worker):
-#    def __init__(self, *args, **kargs):
-#        Worker.__init__(self, *args)
-#        self.log = logging.getLogger('Find')
-#        self.log.debug("[%s] New FindWorker for '%s'" % (id(self), self.root))
-#
-#    def run(self):
-#        name = '-name'
-#        if Config().ignorecase:
-#            name = '-iname '
-#        cmd = 'find %s -type d %s "%s*"' % (self.root, name, Config().pattern[-1])
-#        # FIXME: puede que find no exista
-#        self.ps = subprocess.Popen(cmd, shell=True,
-#                                stdout=subprocess.PIPE,
-#                                stderr=subprocess.PIPE,
-#                                close_fds=True)
-#
-#        logging.info('find cmd[%s]: %s' % (self.ps.pid, cmd))
-#
-#        exclude = PathAsserts()
-#        exclude.add(lambda x: not os.path.isdir(x))
-#        if not Config().process_hidden: exclude.add(hidden)
-#        if not Config().from_root:      exclude.add(lambda x: not is_mine(x))
-#        exclude.add(self.is_excluded)
-#        exclude.add(lambda x: not Config().match_func(x))
-#
-#        for i in self.ps.stdout:
-#            if self.mgr.stop.isSet():
-#                self.log.debug('Killing find %s' % self.ps.pid)
-#                os.kill(self.ps.pid, signal.SIGKILL)
-#                break
-#
-#            i = i.strip('\n')
-#            self.log.debug(i)
-#
-#            if exclude(i): continue
-#            self.mgr.path_notify(i)
-#
-#        self.mgr.state_detach(self)
-#
-#
-#    def state_update(self, state):
-#        if state in [CANCELED, FINISH]:
-#            self.log.debug('Killing find %s at update()' % self.ps.pid)
-#            try:
-#                os.kill(self.ps.pid, signal.SIGKILL)
-#            except OSError, e:
-#                rprint('\n %s %s \n' % (e, self.ps.pid))
+    def has_tasks(self):
+        return self.task_queue.unfinished_tasks_count() != 0
 
-
-class DiskWorker(Worker):
-
-    def __init__(self, *args, **kargs):
-        Worker.__init__(self, *args)
-        self.log = logging.getLogger('Disk')
-        self.log.debug("[New (%s) for '%s']" % (id(self), self.root))
-
-
-    def run(self):
-
-        def walkerror(e):
-            self.log.warning(e)
-
-        exclude = PathAsserts()
-        if not config.process_hidden: exclude.add(hidden)
-        exclude.add(self.is_excluded)
-
-        for root, dirs, files in os.walk(self.root, onerror=walkerror):
-            if self.mgr.stop.isSet(): return
-
-            if len(dirs) == 0: continue
-
-            for d in list(dirs):
-                path = os.path.join(root, d)
-
-                if exclude(path):
-                    dirs.remove(d)
-                    continue
-
-#                if not config.from_root and os.path.islink(path):
-#                    realpath = os.path.abspath(os.path.join(os.path.dirname(path), os.readlink(path)))
-#                    #rprint("LINK: '%s' -> '%s'\n" % (path, realpath))
-#                    self.log.info("LINK: '%s' -> '%s'" % (path, realpath))
-#                    self.mgr.add_work(realpath)
-#                    dirs.remove(d)
-#                    continue
-
-                if os.path.islink(path): continue
-
-                if config.match_func(path):
-                    self.notify(path)
-
-                elif config.pattern > 1 and match_single(path):
-                    self.mgr.add_work(path)
-                    dirs.remove(d)
-
-
-
-class ParentWorker(Worker):
-    "Search in ancestor directories"
-    def run(self):
-        lis =  os.getcwd().split(os.sep)
-        for i in range(len(lis)-1, 0, -1):
-            path = string.join(lis[:i] + [''], os.sep)
-            self.notify(path)
-
-
-class Manager(object):
-
-    class FullException: pass
-
-    def __init__(self):
-        self.path_list = PathList()
-        self.optionalList = PathList()
-        self.__state_observers = []
-        self.__pathobservers = []
-        self.exclude = config.exclude[:]
-
-        #self.pending_lock = threading.Lock()
-        #self.pending = []
-        self.pending = collections.deque()
-
-        if config.parent_mode:
-            self.main_job = self.parent_job
-        elif config.history_mode:
-            self.main_job = self.history_job
-
-        self.workers = []
-        self.stop = threading.Event()
-        self.state = WORKING
-
-        self.tinit = time.time()
-        self.dirname = None
-
-
-    def create_worker(self, workerClass, root = None, **kargs):
-        if self.stop.isSet(): return None
-
-        if root in self.exclude:
-            logging.info("create_worker: '%s' previously exluded" % root)
-            return None
-
-        if root:
-            exclude_cp = [x for x in config.exclude if not root.startswith(x)]
-            self.exclude.append(root)
-        else:
-            exclude_cp = config.exclude[:]
-
-        w = workerClass(self, root, exclude_cp, **kargs)
-        self.workers.append(w)
-
-        if hasattr(w, 'state_update'):
-            self.state_attach(w)
-        if hasattr(w, 'path_update'):
-            self.path_attach(w)
-
-        w.start()
-        return w
-
-    def parent_job(self):
-        self.create_worker(ParentWorker)
-
-    def history_job(self):
-        logging.info('go2: history mode')
-        config.locate = False
-        self.create_worker(HistoryWorker, fname=GO2HISTORY)
-
-    def main_job(self):
-        if config.match_func(os.getcwd()):
-            self.path_notify(os.getcwd())
-
-        #if pattern is a current subdirectory name
-        if len(config.pattern) == 1 and os.path.isdir(config.pattern[0]):
-            self.path_notify(os.path.abspath(config.pattern[0]))
-
-        w = self.create_worker(HistoryWorker, fname=GO2HISTORY)
-        if w: w.join()
-
-        w = self.create_worker(CacheWorker, fname=GO2CACHE)
-        if w: w.join()
-
-        self.pending.extend(set([os.getcwd(), USERDIR]))
-
-        if config.from_root:
-            self.pending.append('/')
+    def terminate(self):
+        if not any(w.is_alive() for w in self.workers):
             return
 
-        self.pending.extend(config.include)
-
-
-    def wait_jobs_end(self):
-        locate_run = False
-        #locate_run = True  # never run locate
-        while 1:
-            if self.pending:
-                logging.debug('PENDIND: %s' % self.pending)
-                if threading.activeCount() < 5:
-                    #path = self.pending[0]
-                    #self.pending_lock.acquire()
-                    #self.pending = self.pending[1:]
-                    #self.pending_lock.release()
-
-                    #self.create_worker(DiskWorker, self.pending.popleft())
-                    self.create_worker(TreeWorker, self.pending.popleft())
-
-
-            if self.stop.isSet() or \
-                   not (self.__any_worker_alive() or self.pending):
-                break
-
-            # FIXME: capturar C-c
-            select.select([],[],[], 0.25)  # espera pasiva
-
-            # Arranca un LocateWorker a los 5 segundos del arranque
-            if config.locate and not locate_run \
-                    and time.time() - self.tinit > 5:
-                locate_run = True
-                if config.locate:
-                    w = self.create_worker(LocateWorker)
-
-
-	if self.stop.isSet(): return
-
-        self.path_list.commit_delayed()
-
-        if len(self.path_list) == 0:
-            self.state_notify(NOTFOUND)
-            return
-
-        self.state_notify(WAITING)
+        logging.debug('pool: terminating')
 
         for w in self.workers:
-            logging.debug("worker %s (%s %s) found %s" % \
-                          (id(w), w.__class__.__name__.ljust(13), w.root, w.count))
+            self.task_queue.put(STOP)
 
+        time.sleep(0.1)
+
+#        term_threads = [ThreadStarted(target=w.terminate) for w in self.workers
+#                        if w.is_alive()]
+#
+#        for t in term_threads:
+#            t.join()
+
+        for w in self.workers:
+            if w.is_alive():
+                w.terminate()
+
+        logging.debug('pool: terminated')
+
+    def join(self):
+        while self.has_tasks():
+            time.sleep(0.1)
+
+        self.terminate()
+
+
+class QueueExtractor(object):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def __call__(self, fd, condition, queue, *args):
+        event = queue.get()
+
+        self.callback(event)
+        return True
+
+
+class QueueReactor(gobject.MainLoop):
+    class Callback(object):
+        def __init__(self, reactor, func):
+            self.reactor = reactor
+            self.func = func
+
+        def __call__(self, *args):
+            try:
+                return self.func(*args)
+
+            except Exception, e:
+                if not isinstance(e, Go2Exception):
+                    print_exc()
+
+                logging.warning('{0!r}: {1}'.format(self.reactor, e))
+                self.reactor.exception = e
+                self.reactor.quit()
+                return False
+
+    def __init__(self):
+        gobject.MainLoop.__init__(self)
+        self.context = self.get_context()
+        self.at_quit_func = lambda: None
+        self.exception = None
+
+    def queue_add_watch(self, queue, func, *args):
+        gobject.io_add_watch(
+            queue._reader, gobject.IO_IN,
+            self.Callback(self, func), queue, *args,
+            priority=gobject.PRIORITY_HIGH)
+
+    def io_add_watch(self, fd, func, *args):
+        gobject.io_add_watch(
+            fd, gobject.IO_IN,
+            self.Callback(self, func), *args)
+
+    def timeout_add(self, t, func, *args):
+        gobject.timeout_add(t, self.Callback(self, func), *args)
+
+    def at_quit(self, func):
+        self.at_quit_func = func
+
+    def process_pending(self):
+        time.sleep(0.1)
+        while self.context.pending():
+            self.context.iteration()
+
+    def iteration(self):
+        time.sleep(0.1)
+        self.context.iteration()
 
     def run(self):
-        self.main_job()
-        self.wait_jobs_end()
-        while(self.__any_worker_alive()):
-            # FIXME: capturar C-c
-            select.select([],[],[], 0.5)
+        time.sleep(0.1)
+        gobject.MainLoop.run(self)
+        self.at_quit_func()
+        if self.exception is not None:
+            raise self.exception
+
+    def quit(self):
+        logging.debug('reactor quit')
+        gobject.MainLoop.quit(self)
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 
-    def add_work(self, path):
-        if path in self.pending or path in self.exclude: return
+class PathBuffer(object):
+    def __init__(self, sink=None):
+        self.sink = sink
+        self.groups = [list() for x in range(4)]
+        self.filters = []
 
-        #self.pending_lock.acquire()
-        self.pending.append(path)
-        #self.pending_lock.release()
+    def set_sink(self, sink):
+        self.sink = sink
 
-
-    def state_attach(self, ob):
-        self.__state_observers.append(ob)
-
-    def state_detach(self, ob):
-        self.__state_observers.remove(ob)
-
-    def path_attach(self, ob):
-        self.path_list.attach(ob.path_update)
-
-    def state_notify(self, state):
-        self.state = state
-
-        for o in self.__state_observers:
-            o.state_update(self.state)
-
-        if state == FULL:
-            self.state_notify(WAITING)
-            self.stop.set()
-
-    def path_notify(self, path):
-        if self.state != WORKING: return
-
-        try:
-            self.path_list.append(path)
-        except PathList.AlreadyExistsException:
-            return
-        except self.FullException:
-            self.state_notify(FULL)
-
-
-    def __any_worker_alive(self):
-        return any((w.isAlive() for w in self.workers))
-        #for i in self.workers:
-        #    if i.isAlive(): return True
-        #return False
-
-
-    def set_election(self, election):
-        if self.state == NOTFOUND: return
-        self.stop.set()
-        if election == None:
-            self.state_notify(CANCELED)
-            return
-
-        self.dirname = self.path_list[election]
-
-        if self.dirname == os.getcwd():
-            self.state_notify(SKIP)
-            return
-
-        if not os.path.exists(self.dirname):
-            self.state_notify(NOTEXIST)
-            return
-
-        self.state_notify(FINISH)
-
-        if config.cmd:
-            cmd = config.cmd
-            cmdlist = cmd.split() + [self.dirname]
-
-            for i in range(len(cmdlist)):
-                if '%d' in cmdlist[i]:
-                    aux = cmdlist[i].replace('%d', '%s')
-                    cmdlist[i] = aux % self.dirname
-
-            logging.info("command is: '%s'" % cmdlist)
-            os.chdir(self.dirname)
-            os.execvp(cmdlist[0], cmdlist)
-        else:
-            saveTarget(self.dirname)
-
-
-
-def break_handler(*args):
-    print args
-
-def go2setup():
-    if os.system('grep go2.sh ~/.bashrc > /dev/null') == 0:
-        print('go2 already configured, skipping.')
-        return 1
-
-    os.system('echo "\n[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh\nalias cd=\'go2 --cd\'" >> ~/.bashrc')
-
-    print('Setting up go2. It will be ready in next shell session.')
-    return 0
-
-
-#def usage():
-#    prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
-#    print 'go2 is a fast directory finder.'
-#    print '''This is version %s, Copyright (C) 2007  David Villa Alises.
-#go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you are
-#welcome to redistribute it under certain conditions; See COPYING for details.
-#''' % (VERSION)
-#
-#    print 'Usage: %s [options] <pattern>' % prgname
-#    print """
-#options:
-#  -i           ignore case                       (default: case sensitive)
-#  -r           search in whole file system       (default: $HOME only)
-#  -d           search into hidden directories    (default: skip hidden)
-#  -H           list history
-#  -l           list only, print matches and exit
-#  --gui        GUI mode
-#  --cmd <cmd>  exec 'cmd'                        (default: chdir)
-#  --dir <dir>  search from 'dir' directory       (default: current)
-#"""
-#    return 1
-
-
-
-################################
-
-#class Config(object):
-#
-#    __metaclass__ = Singleton
-#
-#    class EmptyPatternException: pass
-#    class NoValidPatternException: pass
-#
-#    def __init__(self, argv=[]):
-#        self.history_mode = False
-#        self.parent_mode = False
-#        self.from_root = False
-#        self.ignorecase = False
-#        self.process_hidden = False
-#        self.locate = True
-#        self.list_only = False
-#        self.match_func = match_single
-#        self.pattern = None
-#        self.exclude = []
-#        self.include = []
-#        self.cmd = None
-
-#        self.apply_case = lambda x:x
-#
-#        if not os.path.exists(GO2DIR):
-#            os.mkdir(GO2DIR)
-#
-#        # load file specified excluded paths
-#        self.exclude = loadlines(GO2EXCLUDE)
-#        if self.exclude: logging.debug('exclude: %s' % self.exclude)
-#
-#        self.include = loadlines(GO2INCLUDE)
-#        if self.include: logging.debug('include: %s' % self.include)
-#
-#
-#        try:
-#            opts, self.pattern = getopt.getopt(argv[1:], 'Hirdl',
-#                                               ['setup','no-locate', 'log',
-#                                                'debug', 'gui',
-#                                                'cmd=', 'dir='])
-#        except getopt.GetoptError:
-#            sys.exit(usage())
-#
-#        for o, a in opts:
-#            if o == '-i':
-#                self.ignorecase = True
-#                self.apply_case = string.lower
-#            if o == '-l':
-#                self.list_only = True
-#            if o == '-r':
-#                self.from_root = True
-#            if o == '-d':
-#                self.process_hidden = True
-#            if o == '-H':
-#                self.history_mode = True
-#                self.pattern = ['']    # hack para que todos hagan matching
-#                return
-#            if o == '--no-locate':
-#                self.locate = False
-#            if o == '--setup':
-#                sys.exit(go2setup())
-#            if o == '--cmd':
-#                self.cmd = a
-#            if o == '--dir':
-#                if os.path.isdir(a): dirname = a
-#                elif os.path.isfile(a):
-#                    dirname = os.path.split(a)[0]
-#                else: continue
-#                logging.debug('dir:  ' + dirname)
-#                os.chdir(dirname)
-
-#    def parse_pattern(self):
-#        if not self.pattern:
-#            raise self.EmptyPatternException
-#
-#        if self.pattern[0] == '.':
-#            p = PathFile(GO2HISTORY)
-#            p.insert(os.getcwd())
-#            p.commit()
-#            sys.exit(0)
-#
-#        if self.pattern[0] == '..':
-#            self.parent_mode = True
-#            self.pattern = ['']
-#
-#        if self.ignorecase:
-#            self.pattern = [x.lower() for x in self.pattern]
-#
-#        if len(self.pattern) > 1:
-#            self.match_func = match_multi
-
-
-
-class GtkFrontend:
-    def __init__(self):
-        self.glade = gtk.glade.XML(GO2GUI)
-        self.glade.signal_autoconnect(self)
-
-        # load cmdline config
-        if config.pattern:
-            self.wg_entry.set_text(' '.join(config.pattern))
-
-        cmds = ['gnome-terminal', 'nautilus %d', 'cd']
-        combo_model = self.wg_combo_cmd.get_model()
-        for c in cmds:
-            combo_model.append([c])
-
-        xcmd = config.cmd if config.cmd else combo_model[0][0]
-        self.wg_combo_cmd.child.set_text(xcmd)
-
-        # setup treeview
-        self.store = gtk.ListStore(str, int)
-        self.wg_treeview.set_model(self.store)
-
-        self.tvcolumn = gtk.TreeViewColumn('Path', gtk.CellRendererText(),
-                                           markup=0)
-        self.tvcolumn.set_sort_column_id(0)
-
-        self.wg_treeview.append_column(self.tvcolumn)
-        self.selection = self.wg_treeview.get_selection()
-        self.selection.set_mode(gtk.SELECTION_SINGLE)
-
-        self.__n = 0
-        self.source_id = None
-
-
-    def __getattr__(self, name):
-        "get widget if attribute starts with 'wg_'"
-        if not name.startswith('wg_'):
-            raise AttributeError("'%s' isn't a widget" % name)
-
-        widget = self.glade.get_widget(name[3:])
-        if widget == None:
-            raise AttributeError("Widget '%s' not found" % name)
-
-        self.__dict__[name] = widget
-        return widget
-
-
-    def update_config(self):
-        # switches
-        config.from_root = self.wg_checkbutton_root.get_active()
-        config.ignorecase = self.wg_checkbutton_case.get_active()
-        config.process_hidden = not self.wg_checkbutton_hidden.get_active()
-
-        config.cmd = self.wg_combo_cmd.child.get_text().strip()
-        if config.cmd == 'chdir':
-            config.cmd = None
-
-        config.update(self.wg_entry.get_text().split())
-
-    def main(self):
-        gtk.main()
-
-    def work(self):
-        try:
-            self.update_config()
-        except Go2Config.EmptyPatternException:
-            logging.debug('Falta diálogo de error, vacío')
-            gobject.idle_add(self.gui_reset)
-            return
-        except Go2Config.NoValidPatternException:
-            logging.debug('Falta diálogo de error, no válido')
-            return
-
-        try:
-            gobject.idle_add(self.gui_working)
-            self.manager = Manager()
-            self.manager.path_attach(self)
-            self.manager.state_attach(self)
-            self.manager.run()
-        except AttributeError, e:
-            print e
-
-
-    def gui_reset(self, entry='', progress=''):
-        if not entry is None:
-            self.wg_entry.set_text(entry)
-        self.wg_entry.grab_focus()
-        self.wg_button_search.set_sensitive(True)
-        self.store.clear()
-        self.wg_button_cancel.set_sensitive(False)
-        self.wg_button_clean.set_sensitive(False)
-        self.wg_button_go.set_sensitive(False)
-        self.progressbar_text(progress)
-
-    def gui_working(self):
-        def pulse():
-            self.wg_progressbar.pulse()
+    def add(self, path_item):
+        if path_item is None:
             return True
 
-        self.wg_button_search.set_sensitive(False)
-        self.wg_button_cancel.set_sensitive(True)
-        self.wg_button_clean.set_sensitive(False)
-        self.wg_button_go.set_sensitive(False)
-        self.source_id = gobject.timeout_add(150, pulse)
+        try:
+            self._tryTo_add(path_item)
+        except Sink.FullSinkException:
+            return False
 
-    def progressbar_text(self, text):
-        if self.source_id:
-            gobject.source_remove(self.source_id)
-            self.source_id = None
+        return True
 
-        self.wg_progressbar.set_fraction(0)
-        self.wg_progressbar.set_text(text)
+    def _tryTo_add(self, item):
+#        print '\r', repr(item.path)
+#        print '\r', self.groups[item.level]
 
-    def on_window_delete_event(self, *args):
-        gtk.main_quit()
+        if item.path in self.groups[item.level] or \
+           any(f(item.path) for f in self.filters):
+            return
 
-    def on_button_search_clicked(self, wd):
-        self.progressbar_text('')
-        self.store.clear()
-        self.__n = 0
-        thread.start_new_thread(self.work, ())
+        self.groups[item.level].append(item.path)
 
-    def on_button_cancel_clicked(self, wd):
-        self.manager.set_election(None)
-        self.gui_reset()
+        if item.level == MatchLevel.START:
+            self.sink.add_entry(item.path)
 
-    def on_button_clean_clicked(self, wd):
-        self.gui_reset()
+    def add_filter(self, f):
+        self.filters.append(f)
 
-    def on_button_go_clicked(self, wd):
-        self.update_config()
-        model, it = self.selection.get_selected()
-        if it == None: return # no hay selección
-        self.manager.set_election(model[it][1])
-        gtk.main_quit()
+    def flush_alternate(self):
 
-    def offline_path_update(self, path):
-        tagged_path = highlight(config.pattern, path, '<b>', '</b>').\
-                      replace(USERDIR, '~', 1)
+        def add_paths_of_group(group):
+            for path in group:
+                self.sink.add_entry(path)
 
-        self.store.append([tagged_path, self.__n])
+        try:
+            for level in range(1, 4):
+                if not self.groups[level]:
+                    continue
 
-        if self.__n == 0:
-            self.wg_button_go.set_sensitive(True)
-            self.wg_treeview.grab_focus()
+                if level != 3:
+                    self.sink.next_group()
 
-        self.__n += 1
+                add_paths_of_group(self.groups[level])
+
+        except Sink.FullSinkException:
+            return
+
+
+class Sink(object):
+    class FullSinkException(Go2Exception):
+        pass
+
+    class InvalidChoiceException(Go2Exception):
+        pass
+
+    def add_entry(self, path):
+        raise NotImplementedError
+
+    def next_group(self):
+        pass
+
+
+class PrintSink(Sink):
+    def add_entry(self, path):
+        rprint(path + '\n\r')
+
+
+class Menu(Sink):
+    def __init__(self, reactor, out, max_size=26):
+        self.reactor = reactor
+        self.fd = out
+        self.max_size = max_size
+        self.entries = []
+        self.is_full = False
+        self.target = None
+        self.formatter = self.default_formatter
+
+    def perform_choice(self, choice):
+        if not self.is_valid_choice(choice):
+            raise self.InvalidChoiceException()
+
+        logging.debug("choice: {0}, entries: {1}".format(
+                choice, self.entries))
+
+        self.target = self.entries[choice]
+        self.reactor.quit()
+
+    def is_valid_choice(self, choice):
+        return choice in range(0, len(self.entries))
+
+    def next_group(self):
+        self.out_write('\r   ---        \n')
+
+    def add_entry(self, entry):
+        if len(self.entries) >= self.max_size:
+            self.is_full = True
+            raise self.FullSinkException
+
+        self.entries.append(to_unicode(entry))
+        self.write_last()
+
+    def write_last(self):
+        suffix = ''
+        if len(self.entries) == 1:
+            suffix += ' [ENTER]'
+
+        line = self.formatter(
+            len(self.entries) + ord('a') - 1,
+            self.entries[-1],
+            suffix)
+
+        self.out_write(line)
+
+    def default_formatter(self, index, path, suffix):
+        return '{0:c}: {1}'.format(index, path)
+
+    def out_write(self, text):
+        self.fd.write(text)
+        self.fd.flush()
+
+
+def user_break_checker(key):
+    if key in [ESC, CTRL_C]:
+        raise CancelException
+
+
+class UserInputHandler(object):
+    def __call__(self, fd, condition=None):
+        key = ord(fd.read(1))
+        user_break_checker(key)
+        return True
+
+
+class UserChoiceHandler(object):
+    def __init__(self, sink):
+        self.sink = sink
+
+    def __call__(self, fd, condition=None):
+        key = ord(fd.read(1))
+#        key = os.read(fd, 1)
+        user_break_checker(key)
+
+        try:
+            choice = self.key2choice(key)
+            self.sink.perform_choice(choice)
+        except Sink.InvalidChoiceException:
+            return True
+
         return False
 
-    def path_update(self, path):
-        gobject.idle_add(self.offline_path_update, path)
+    def key2choice(self, key):
+        if key == ENTER:
+            return 0
 
-    def offline_state_update(self, state):
-        if state == NOTFOUND:
-            logging.debug('NOTFOUND')
-            self.gui_reset(None, 'Not Found')
+        return key - ord('a')
 
-        if state == WAITING:
-            logging.debug('WAITING')
-            self.wg_button_search.set_sensitive(True)
-            self.wg_button_cancel.set_sensitive(False)
-            self.wg_button_clean.set_sensitive(True)
-            self.progressbar_text('Ready: %d matches' % len(self.manager.path_list))
 
+class IgnoreManager(object):
+    def __init__(self, content):
+        self.patterns = []
+        for line in content.split():
+            line = line.strip()
+            if not os.sep in line:
+                line = '*/{0}/*'.format(line)
+
+            self.patterns.append(line)
+
+    @classmethod
+    def from_file(cls, fname):
+        return IgnoreManager(config.fs.getcontents(fname))
+
+    def is_ignored(self, path):
+        assert path.startswith(os.sep), "It must be an absolute path"
+
+        path = os.path.normpath(path) + os.sep
+
+        retval = any(fnmatch(path, x) for x in self.patterns)
+        if retval:
+            logging.debug("Ignored: %s", path)
+
+        return retval
+
+
+class Go2Base(object):
+    def __init__(self):
+        self.pool = ProcessPool()
+        self.reactor = QueueReactor()
+        self.path_buffer = PathBuffer()
+
+        self.setup_ignore()
+        self.setup_tty()
+
+        self.reactor.queue_add_watch(self.pool.output_queue,
+                                     QueueExtractor(self.path_buffer.add))
+        self.reactor.timeout_add(250, self.end_checker)
+
+    def setup_ignore(self):
+        try:
+            ignore_manager = IgnoreManager.from_file(GO2IGNORE)
+            self.path_buffer.add_filter(ignore_manager.is_ignored)
+        except ResourceNotFoundError:
+            pass
+
+    def setup_tty(self):
+        tty = TTY()
+        tty.set_raw()
+        self.reactor.at_quit(tty.restore)
+
+    def run(self):
+        retval = 1
+        self.history = PathFileStore(GO2HISTORY)
+        self.cache = PathFileStore(GO2CACHE)
+
+        self.create_tasks()
+
+        try:
+            self.reactor.run()
+            self.on_success()
+            retval = 0
+
+        except CancelException:
+            message(u"canceled by user")
+        except NotMatchException:
+            message(u"pattern not found")
+
+        self.pool.terminate()
+        return retval
+
+    def create_tasks(self):
+        self.create_file_tasks()
+        self.create_command_tasks()
+
+    def create_file_tasks(self):
+        self.pool.add_task(from_file_provider, self.history)
+        self.pool.sleep_free_workers(seconds=0.5)
+        self.pool.add_task(from_file_provider, self.cache)
+
+    def create_command_tasks(self):
+        paths = ListUniq(config.search_path.split(':'))
+#        paths.extend(self.not_overlapped_history())
+
+        for path in paths:
+            self.pool.add_task(tree_provider, path)
+
+    def end_checker(self):
         return False
 
-    def state_update(self, state):
-        gobject.idle_add(self.offline_state_update, state)
+    def on_success(self):
+        pass
 
 
-class Dummy(): pass
+class Go2Interactive(Go2Base):
+    def __init__(self):
+        Go2Base.__init__(self)
+        self.menu = Menu(self.reactor, sys.stdout)
+        self.menu.formatter = high_pattern_formatter
+        self.path_buffer.set_sink(self.menu)
+
+        self.reactor.io_add_watch(sys.stdin, UserChoiceHandler(self.menu))
+
+        self.progress = cycle(range(4))
+
+    def end_checker(self):
+        if self.menu.is_full:
+            message(u"warning: too many matches!")
+            rprint('Select path: ')
+            self.pool.terminate()
+            return False
+
+        if self.pool.has_tasks():
+            rprint(u"\rSearching{0:3} ".format('.' * self.progress.next()))
+            return True
+
+        self.path_buffer.flush_alternate()
+
+        if len(self.menu.entries) == 0:
+            raise NotMatchException
+
+        if len(self.menu.entries) == 1:
+            message(u"single match")
+            self.menu.perform_choice(0)
+            return False
+
+        rprint(u"Select path: ")
+        return False
+
+    def on_success(self):
+        rprint(u"Changing to: {0}\n".format(
+                high(abbreviate_home_prefix(self.menu.target))))
+
+        save_target(self.menu.target)
+
+        self.history.add_visit(self.menu.target).save()
+        logging.debug("Saved history %s", len(self.menu.entries))
+
+        self.cache.add_visit_seq(self.menu.entries).save()
 
 
+class Go2ListOnly(Go2Base):
+    def __init__(self):
+        Go2Base.__init__(self)
+        self.path_buffer.set_sink(PrintSink())
+        self.reactor.io_add_watch(sys.stdin, UserInputHandler())
 
-class Go2Config(optparse.Values):
+    def end_checker(self):
+        if not self.pool.has_tasks():
+            self.reactor.quit()
 
-    class EmptyPatternException: pass
-    class NoValidPatternException: pass
-
-    def __init__(self, values, pattern):
-        optparse.Values.__init__(self)
-        opts = dict([(k,v) for k,v in values.__dict__.items()
-                     if not k.startswith('_')])
-
-        self._update(opts, "loose")
-
-        self.pattern = pattern
-        self.parent_mode = False
-        self.match_func = match_single
-
-        if not os.path.exists(GO2DIR):
-            os.mkdir(GO2DIR)
-
-        # load file specified excluded paths
-        self.exclude = loadlines(GO2EXCLUDE)
-        if self.exclude:
-            logging.debug('exclude: %s' % self.exclude)
-
-        self.include = loadlines(GO2INCLUDE)
-        if self.include:
-            logging.debug('include: %s' % self.include)
+        return True
 
 
-    def update(self, pattern=None):
-        pattern = pattern if not pattern is None else self.pattern
+def create_directory_wizzard(path):
+    basetarget = os.path.basename(path)
+    print "cd: '%s' does not exist. (c)ancel, (s)earch or (m)ake? (C/s/m):" % basetarget,
 
-        if not pattern is None:
-            self.pattern = pattern
-            if pattern[0].startswith('.'):
-                config.process_hidden = True
+    try:
+        answer = raw_input().lower()
+    except KeyboardInterrupt:
+        answer = ''
+        print
 
-        self.apply_case = string.lower if self.ignorecase else lambda x:x
+    if len(answer) != 1 or answer not in 'sm':
+        print 'Canceled'
+        return 1
 
-        if not self.pattern:
-            raise self.EmptyPatternException
+    if answer == 'm':
+        try:
+            config.fs.makedir(path)
+        except OSError, e:
+            print e
+            sys.exit(1)
 
-        if self.pattern[0] == '.':
-            p = PathFile(GO2HISTORY)
-            p.insert(os.getcwd())
-            p.commit()
-            sys.exit(0)
+        print("go2: Making and changing to directory '%s'." % path)
+        save_in_history(path)
+        save_target(path)
+        return 0
 
-        if self.pattern[0] == '..':
-            self.parent_mode = True
-            self.pattern = ['']
-
-        if self.ignorecase:
-            self.pattern = [x.lower() for x in self.pattern]
-
-        if len(self.pattern) > 1:
-            self.match_func = match_multi
-
-
-class Go2optionParser(optparse.OptionParser):
-
-    def parse_args(self):
-        config, args = optparse.OptionParser.parse_args(self)
-        return Go2Config(config, args), args
+    # search
+    Go2Interactive().run()
 
 
-def console_main():
+def chdir_decorator(wizzard=False):
+    if not config.pattern:
+        save_target(USERDIR)
+        return 0
 
-#    try:
-#        config.parse_pattern()
-#    except Go2Config.EmptyPatternException:
-#        sys.exit(usage())
-#    except Go2Config.NoValidPatternException:
-#        print 'go2: invalid pattern', args
-#        sys.exit(1)
+    params = str.join(' ', config.pattern)
+    try:
+        target = os.path.abspath(params)
+    except IOError, e:
+        logging.error(e)
+        save_target(target)
+        return 0
+
+    if params == '-':
+        save_target('-')
+        return 0
+
+    if config.fs.exists(target):
+        save_in_history(target)
+        save_target(target)
+        return 0
+
+    raise NotExistsException(target)
 
 
-    manager = Manager()
-    console = ConsoleUI(manager)
+def get_config(args=None):
+    args = args or []
 
-    console.start()
-    manager.run()
-    console.join()
+    encoding = locale.getdefaultlocale()[1]
+
+    parser = argparse.ArgumentParser(
+        prog = 'go2',
+        description = DESCRIPTION.format(VERSION),
+        epilog = '.',
+        formatter_class = argparse.RawDescriptionHelpFormatter)
+
+    parser.add_argument('pattern', nargs='*', help="pattern to find")
+    parser.add_argument('--cd', dest='chdir', action="store_true",
+                        help="'cd' alias with caching")
+    parser.add_argument('-i', '--ignore-case', dest='ignorecase',
+                        action='store_true', default=False,
+                        help="ignore case search")
+    parser.add_argument('-l', '--list-only', dest='listonly', action='store_true',
+                        help="list matches and exits")
+    parser.add_argument('-p', '--path', metavar='PATH', dest='search_path',
+                        default="{0}:{1}".format(CWD, USERDIR),
+                        help='set search path (default: "./:{0}")'.format(USERDIR))
+    parser.add_argument('-r', '--from-root', dest='from_root',
+                        action='store_true',
+                        help="add / to the search path")
+    parser.add_argument('-v', '--version', action='version',
+                        version='%(prog)s ' + VERSION)
+    parser.add_argument('--setup',
+                        action='store_true',
+                        help="install go2 in your .bashrc")
+
+    retval = parser.parse_args(args)
+    retval.parser = parser
+
+    retval.engine = Go2ListOnly if retval.listonly else Go2Interactive
+
+    retval.encoding = encoding
+    retval.pattern = [to_unicode(x, encoding) for x in retval.pattern]
+
+    # process args
+    if retval.ignorecase:
+        retval.pattern = [x.lower() for x in retval.pattern]
+
+#    retval.apply_case = str.lower if retval.ignorecase else str
+#    print retval.pattern
+
+    if retval.from_root:
+        retval.search_path += ':/'
+
+    # application globals
+    retval.matcher = PathMatcher(retval.pattern)
+
+    retval.fs = OSFS('/')
+    retval.fs.makedir(GO2DIR, allow_recreate=True)
+
+    retval.before = HIGH
+    retval.after = LOW
+
+    return retval
 
 
 if __name__ == '__main__':
-    try:
-        os.chdir(os.environ['PWD'])
-    except OSError,e:
-        logging.error("Current directory does not exists!")
-        saveTarget(USERDIR)
-        sys.exit(1)
-
-    prgname = os.path.splitext(os.path.basename(sys.argv[0]))[0]
-    parser = Go2optionParser()
-    parser.set_usage('''go2 is a fast directory finder.
-This is version %s, Copyright (C) 2007,2008,2009 David Villa Alises.
-go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
-are welcome to redistribute it under certain conditions; See COPYING
-for details.
-
-Usage: %s [options] <pattern> [<pattern>...]''' % (VERSION, prgname))
-
-    parser.add_option('--cd', dest='chdir', action="store_true",
-                      help="")
-    parser.add_option('--debug', action='store_true',
-                      help="")
-    parser.add_option('--gui', action='store_true',
-                      help="GUI mode")
-    parser.add_option('-H', '--history_mode',
-                      action='store_true',
-                      help="list history")
-    parser.add_option('-i', '--ignore-case', dest='ignorecase',
-                      action='store_true', default=False,
-                      help="ignore case search")
-    parser.add_option('-l', '--list-only', dest='list_only',
-                      action='store_true',
-                      help="list only, print matches and exit")
-    parser.add_option('--log', action='store_true',
-                      help="")
-    parser.add_option('-r', '--from-root', dest='from_root',
-                      action='store_true',
-                      help="search in whole file system")
-    parser.add_option('-d', '--dot-dirs', dest='process_hidden',
-                      action='store_true',
-                      help="search into hidden directories")
-    parser.add_option('--no-locate', dest='locate',
-                      action='store_false', default=True,
-                      help="do not start a locate worker")
-    parser.add_option('--setup',
-                      action='store_true',
-                      help="install go2 in your .bashrc")
-    parser.add_option('--cmd', dest='cmd',
-                      help="exec 'cmd' instead of 'chdir'")
-    parser.add_option('--basedir', dest='basedir',
-                      help="search from 'dir' directory")
-
-#    FIXME: argumentos en el fichero de config
-#
-#    if os.path.exists(GO2CONFIG):
-#        argv[1:1]  = file(GO2CONFIG).read().split()
-
-
-    try:
-        config, args = parser.parse_args()
-    except Go2Config.EmptyPatternException:
-        parser.print_help()
-        sys.exit(1)
-    except Go2Config.NoValidPatternException:
-        print 'go2: invalid pattern', args
-        sys.exit(1)
-
-
-    if config.chdir:
-        if not config.pattern:
-            saveTarget(USERDIR)
-            sys.exit(0)
-
-        params = ' '.join(args)
-        try:
-            target = os.path.abspath(params)
-        except OSError, e:
-            logging.error(e)
-            saveTarget(USERDIR)
-            sys.exit(0)
-
-        if params == '-':
-            saveTarget('-')
-            sys.exit(0)
-
-        if os.path.exists(target):
-            save_in_history(target)
-            saveTarget(target)
-            sys.exit(0)
-
-        basetarget = os.path.basename(target)
-        print "cd: '%s' does not exist. Cancel, Search or Make? (C,s,m):" % basetarget,
-
-        try:
-            ans = raw_input()
-        except KeyboardInterrupt:
-            print
-            sys.exit(1)
-
-        if len(ans) != 1:
-            sys.exit(1)
-
-        ans = ans.lower()
-        if ans not in 'sm':
-            sys.exit(1)
-
-        if ans == 'm':
-            try:
-                os.mkdir(target)
-            except OSError, e:
-                print e
-                sys.exit(1)
-
-            print("go2: Making and changing to directory '%s'." % target)
-            save_in_history(target)
-            saveTarget(target)
-            sys.exit(0)
-
-
-        config.pattern = [basetarget]
-
-    if config.basedir:
-        if os.path.isdir(a): dirname = a
-        elif os.path.isfile(a):
-            dirname = os.path.split(a)[0]
-
-        logging.debug('dir:  ' + dirname)
-        os.chdir(dirname)
-
-    if config.history_mode:
-        config.pattern = [''] # hack para que todos hagan matching
+    config = get_config(sys.argv[1:])
 
     if config.setup:
         sys.exit(go2setup())
 
-    console = logging.StreamHandler()
-    formatter = logging.Formatter('\r%(levelname)-8s: %(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger().addHandler(console)
-
-    if config.log or config.debug:
-        logging.basicConfig(level=logging.DEBUG,
-            format='%(asctime)s %(levelname)-8s %(name)-10s %(message)s',
-            filename=GO2LOG)
-
-    if config.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-    else:
-        logging.getLogger().setLevel(logging.ERROR)
-
-
-    logging.info("\n\n---------- [go2 '%s']" % sys.argv[1:])
-
-    #try:
-    #    import psyco
-    #    psyco.full()
-    #except ImportError:
-    #    logging.warning("psyco not available")
-
-    has_DISPLAY = os.environ.has_key("DISPLAY")
-    if not has_DISPLAY:
-        logging.warning("$DISPLAY isn't set, fallback to console mode")
-
-    if config.gui and has_DISPLAY:
+    if config.chdir:
         try:
-            import gobject
-            import gtk, gtk.glade
-            gobject.threads_init()
-            GtkFrontend().main()
-            sys.exit(1)
-
-        except ImportError:
-            logging.error("go2 requires python-gtk2 to provide GUI interaction.")
+            sys.exit(chdir_decorator())
+        except NotExistsException, target:
+            sys.exit(create_directory_wizzard(target.args[0]))
 
     if not config.pattern:
-        logging.error('No pattern given.')
-        parser.print_help()
+        print("go2.py: error: too few arguments\n")
+        config.parser.print_help()
         sys.exit(1)
 
-    config.update()
-    console_main()
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    sys.exit(config.engine().run())

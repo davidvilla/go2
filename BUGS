@@ -1,114 +1,46 @@
-Exception in thread HistoryWorker:
-Traceback (most recent call last):
-File "/usr/lib/python2.5/threading.py", line 486, in __bootstrap_inner
-  self.run()
-File "/usr/lib/go2/go2.py", line 394, in run
-  if config.match_func(i):
-File "/usr/lib/go2/go2.py", line 114, in match_multi
-  match = items[-1].startswith(pattern[-1])
+
+Desde un directorio que ya no existe:
+
+sh: 0: getcwd() failed: No such file or directory
+sh: 0: getcwd() failed: No such file or directory
+lsh: 0: getcwd() failed: No such file or directory
+sTraceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 756, in <module>
+    sys.exit(chdir_decorator())
+  File "/usr/lib/go2/go2.py", line 684, in chdir_decorator
+    target = os.path.abspath(params)
+  File "/usr/lib/python2.7/posixpath.py", line 347, in abspath
+    cwd = os.getcwd()
+OSError: [Errno 2] No such file or directory
+
+
+At press ENTER without matches:
+
+Searching.   Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1090, in <module>
+    sys.exit(Go2().main())
+  File "/usr/lib/go2/go2.py", line 908, in main
+    self.reactor.run()
+  File "/usr/lib/go2/go2.py", line 742, in run
+    raise self.exception
 IndexError: list index out of range
 
-
-
-$ go2 repo scapy
-
-Searching...Exception in thread HistoryWorker:
+$ cd repos  # repos existe
 Traceback (most recent call last):
-File "/usr/lib/python2.5/threading.py", line 486, in __bootstrap_inner
-  self.run()
-File "/usr/lib/go2/go2.py", line 394, in run
-  if config.match_func(i):
-File "/usr/lib/go2/go2.py", line 114, in match_multi
-  match = items[-1].startswith(pattern[-1])
-IndexError: list index out of range
-
-
-david@amy:~$ go2 cpp-obse
-a: ~/repos/bb-arco/ice-hello/cpp-observer [ENTER]
-Changing to: /home/david/repos/bb-arco/ice-hello/cpp-observer
-^CError in atexit._run_exitfuncs:
-Traceback (most recent call last):
-  File "/usr/lib/python2.6/atexit.py", line 24, in _run_exitfuncs
-Process Process-1:
-Traceback (most recent call last):
-  File "/usr/lib/python2.6/multiprocessing/process.py", line 232, in _bootstrap
-    func(*targs, **kargs)
-  File "/usr/lib/python2.6/multiprocessing/util.py", line 269, in _exit_function
-    p.join()
-  File "/usr/lib/python2.6/multiprocessing/process.py", line 119, in join
-    self.run()
-  File "/usr/lib/python2.6/multiprocessing/process.py", line 88, in run
-    self._target(*self._args, **self._kwargs)
-    res = self._popen.wait(timeout)
-  File "/usr/lib/go2/go2.py", line 531, in worker
-  File "/usr/lib/python2.6/multiprocessing/forking.py", line 117, in wait
-    func(output, *args)
-  File "/usr/lib/go2/go2.py", line 317, in tree_task
-    CommandTask(output, "tree -dfin --noreport %s" % root)
-  File "/usr/lib/go2/go2.py", line 271, in __init__
-    self.communicate()
-  File "/usr/lib/go2/go2.py", line 297, in communicate
-    for path in self.ps.stdout:
-KeyboardInterrupt
-    return self.poll(0)
-  File "/usr/lib/python2.6/multiprocessing/forking.py", line 106, in poll
-    pid, sts = os.waitpid(self.pid, flag)
-KeyboardInterrupt
-Error in sys.exitfunc:
-Traceback (most recent call last):
-  File "/usr/lib/python2.6/atexit.py", line 24, in _run_exitfuncs
-    func(*targs, **kargs)
-  File "/usr/lib/python2.6/multiprocessing/util.py", line 269, in _exit_function
-    p.join()
-  File "/usr/lib/python2.6/multiprocessing/process.py", line 119, in join
-    res = self._popen.wait(timeout)
-  File "/usr/lib/python2.6/multiprocessing/forking.py", line 117, in wait
-    return self.poll(0)
-  File "/usr/lib/python2.6/multiprocessing/forking.py", line 106, in poll
-    pid, sts = os.waitpid(self.pid, flag)
-KeyboardInterrupt
-
----------------
-
-
-^CError in atexit._run_exitfuncs:
-Traceback (most recent call last):
-  File "/usr/lib/python2.7/atexit.py", line 24, in _run_exitfuncs
-Process Process-1:
-Traceback (most recent call last):
-  File "/usr/lib/python2.7/multiprocessing/process.py", line 258, in _bootstrap
-    func(*targs, **kargs)
-  File "/usr/lib/python2.7/multiprocessing/util.py", line 295, in _exit_function
-    p.join()
-  File "/usr/lib/python2.7/multiprocessing/process.py", line 145, in join
-    self.run()
-  File "/usr/lib/python2.7/multiprocessing/process.py", line 114, in run
-    self._target(*self._args, **self._kwargs)
-  File "/usr/lib/go2/go2.py", line 531, in worker
-    func(output, *args)
-  File "/usr/lib/go2/go2.py", line 317, in tree_task
-    CommandTask(output, "tree -dfin --noreport %s" % root)
-  File "/usr/lib/go2/go2.py", line 271, in __init__
-    self.communicate()
-  File "/usr/lib/go2/go2.py", line 298, in communicate
-    if self.abort:
-KeyboardInterrupt
-    res = self._popen.wait(timeout)
-  File "/usr/lib/python2.7/multiprocessing/forking.py", line 148, in wait
-    return self.poll(0)
-  File "/usr/lib/python2.7/multiprocessing/forking.py", line 133, in poll
-    pid, sts = os.waitpid(self.pid, flag)
-KeyboardInterrupt
-Error in sys.exitfunc:
-Traceback (most recent call last):
-  File "/usr/lib/python2.7/atexit.py", line 24, in _run_exitfuncs
-    func(*targs, **kargs)
-  File "/usr/lib/python2.7/multiprocessing/util.py", line 295, in _exit_function
-    p.join()
-  File "/usr/lib/python2.7/multiprocessing/process.py", line 145, in join
-    res = self._popen.wait(timeout)
-  File "/usr/lib/python2.7/multiprocessing/forking.py", line 148, in wait
-    return self.poll(0)
-  File "/usr/lib/python2.7/multiprocessing/forking.py", line 133, in poll
-    pid, sts = os.waitpid(self.pid, flag)
-KeyboardInterrupt
+  File "/usr/lib/go2/go2.py", line 942, in <module>
+    sys.exit(chdir_decorator())
+  File "/usr/lib/go2/go2.py", line 872, in chdir_decorator
+    save_in_history(target)
+  File "/usr/lib/go2/go2.py", line 284, in save_in_history
+    PathFileStore(GO2HISTORY).insert_and_save(path)
+  File "/usr/lib/go2/go2.py", line 217, in init_
+    self.load()
+  File "/usr/lib/go2/go2.py", line 223, in load
+    self._load_file_lines(fd)
+  File "/usr/lib/go2/go2.py", line 242, in _load_file_lines
+    self.data[decode(path)] = int(visits)
+  File "/usr/lib/go2/go2.py", line 230, in decode
+    return path.strip().decode('utf8')
+  File "/usr/lib/python2.7/encodings/utf_8.py", line 16, in decode
+    return codecs.utf_8_decode(input, errors, True)
+UnicodeDecodeError: 'utf8' codec can't decode byte 0xf1 in position 64: 
