@@ -1,14 +1,14 @@
 10
 
 dir
-7977
+8007
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps/packages/go2/trunk/debian
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps
 
 
 
-2011-12-16T16:12:05.677191Z
-7961
+2011-12-30T16:57:03.707462Z
+8005
 davidvilla-guest
 has-props
 
@@ -131,33 +131,9 @@ davidvilla-guest
 
 2
 
-watch
-file
-8005
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-deleted
-
 changelog
 file
-8005
+
 
 
 
