@@ -910,7 +910,7 @@ class Go2ListOnly(Go2Base):
 
 def create_directory_wizzard(path):
     basetarget = os.path.basename(path)
-    print "cd: '%s' does not exist. Cancel, Search or Make? (C,s,m):" % basetarget,
+    print "cd: '%s' does not exist. (c)ancel, (s)earch or (m)ake? (C/s/m):" % basetarget,
 
     try:
         answer = raw_input().lower()
