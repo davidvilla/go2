@@ -1,7 +1,9 @@
-Release 1.20111230
+Release 1.20120101
 ------------------
 
 * Refactoring: new classes UserInputHandler and UserChoiceHandler
+* OrderedDict for PathFileStore
+* depends on python2.7
 
 
 Release 1.20111223
