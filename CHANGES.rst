@@ -1,7 +1,8 @@
-Release 1.20111230
+Release 1.20120111
 ------------------
 
 * Refactoring: new classes UserInputHandler and UserChoiceHandler
+* highlight and abbreviate path in the chdir-wizzard
 
 
 Release 1.20111223

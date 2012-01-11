@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '1.20111228'
+VERSION = '1.20120111'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
@@ -928,6 +928,9 @@ def create_directory_wizzard(path):
         except OSError, e:
             print e
             sys.exit(1)
+
+        path = config.matcher.high_pattern(path)
+        path = abbreviate_home_prefix(path)
 
         print("go2: Making and changing to directory '%s'." % path)
         save_in_history(path)
