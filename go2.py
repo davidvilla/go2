@@ -909,6 +909,12 @@ class Go2ListOnly(Go2Base):
 
 
 def create_directory_wizzard(path):
+
+    def show_make_and_change(path):
+        path = config.matcher.high_pattern(path)
+        path = abbreviate_home_prefix(path)
+        print("go2: Making and changing to directory '%s'." % path)
+
     basetarget = os.path.basename(path)
     print "cd: '%s' does not exist. (c)ancel, (s)earch or (m)ake? (C/s/m):" % basetarget,
 
@@ -929,10 +935,7 @@ def create_directory_wizzard(path):
             print e
             sys.exit(1)
 
-        path = config.matcher.high_pattern(path)
-        path = abbreviate_home_prefix(path)
-
-        print("go2: Making and changing to directory '%s'." % path)
+        show_make_and_change(path)
         save_in_history(path)
         save_target(path)
         return 0
