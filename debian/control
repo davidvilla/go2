@@ -1,8 +1,8 @@
 Source: go2
 Section: utils
-Priority: extra
+Priority: optional
 Maintainer: David Villa Alises <David.Villa@uclm.es>
-Uploaders: Francisco Moya <paco@debian.org>
+Uploaders: Python Apps Packaging Team <python-apps-team@lists.alioth.debian.org>
 Build-Depends: debhelper (>= 7.0.50~), python (>= 2.7~), python-docutils
 Standards-Version: 3.9.2
 Homepage: http://savannah.nongnu.org/projects/go2/
