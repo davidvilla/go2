@@ -3,7 +3,7 @@ Section: utils
 Priority: optional
 Maintainer: David Villa Alises <David.Villa@uclm.es>
 Uploaders: Python Apps Packaging Team <python-apps-team@lists.alioth.debian.org>
-Build-Depends: debhelper (>= 7.0.50~), python (>= 2.7~), python-docutils
+Build-Depends: debhelper (>= 7.0.50~), python, python-docutils
 Standards-Version: 3.9.2
 Homepage: http://savannah.nongnu.org/projects/go2/
 Vcs-Svn: svn://svn.debian.org/python-apps/packages/go2/trunk/
@@ -12,8 +12,7 @@ Vcs-Browser: http://svn.debian.org/viewsvn/python-apps/packages/go2/trunk/
 Package: go2
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, tree
-X-Python-Version: all
-Description:Fast directory finder
+Description: fast directory finder
  This package provides a mechanism for quickly changing directory on
  the commandline, in the style of the old Norton Change Directory for
  DOS, but designed specifically for bash.
