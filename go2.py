@@ -116,7 +116,7 @@ class PathItem:
         return self.path == other.path and self.level == other.level
 
 
-def go2setup(mode='r+'):
+def go2setup():
     try:
         if ACTIVATION_CMD in config.fs.getcontents(
             os.path.join(USERDIR, '.bashrc')):
@@ -126,7 +126,7 @@ def go2setup(mode='r+'):
     except ResourceNotFoundError:
         pass
 
-    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'w') as fd:
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'a') as fd:
         fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
         print('Setting up go2. It will be ready in next shell session.')
 
