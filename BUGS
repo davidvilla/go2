@@ -25,6 +25,8 @@ Searching.   Traceback (most recent call last):
     raise self.exception
 IndexError: list index out of range
 
+-------------------------------------------------------
+
 $ cd repos  # repos existe
 Traceback (most recent call last):
   File "/usr/lib/go2/go2.py", line 942, in <module>
@@ -43,4 +45,16 @@ Traceback (most recent call last):
     return path.strip().decode('utf8')
   File "/usr/lib/python2.7/encodings/utf_8.py", line 16, in decode
     return codecs.utf_8_decode(input, errors, True)
-UnicodeDecodeError: 'utf8' codec can't decode byte 0xf1 in position 64: 
+UnicodeDecodeError: 'utf8' codec can't decode byte 0xf1 in position 64:
+
+-------------------------------------------------------
+
+$ cd not/existing/path
+
+
+-------------------------------------------------------
+
+$ go2 c++
+
+
+-------------------------------------------------------
