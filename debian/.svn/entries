@@ -1,14 +1,14 @@
 10
 
 dir
-8064
+8133
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps/packages/go2/trunk/debian
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps
 
 
 
-2012-01-01T20:43:59.884282Z
-8018
+2012-02-01T10:36:53.699418Z
+8133
 davidvilla-guest
 has-props
 
@@ -31,14 +31,14 @@ dir
 
 control
 file
-8106
 
 
 
-2012-01-23T19:11:49.254731Z
-5bf8cc783b804f9af9df83aeed573006
-2012-01-23T19:12:45.776679Z
-8106
+
+2012-02-01T10:08:35.947210Z
+681e98ca1bc11a689c328d0223998fa9
+2012-02-01T10:36:53.699418Z
+8133
 davidvilla-guest
 
 
@@ -61,41 +61,7 @@ davidvilla-guest
 
 
 
-1134
-
-dirs
-file
-
-
-
-delete
-2011-11-28T10:00:47.680668Z
-d41d8cd98f00b204e9800998ecf8427e
-2011-07-17T00:25:10.019366Z
-7335
-davidvilla-guest
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-0
+1103
 
 compat
 file
@@ -133,7 +99,7 @@ davidvilla-guest
 
 changelog
 file
-8106
+
 
 
 
@@ -201,7 +167,7 @@ davidvilla-guest
 
 rules
 file
-8065
+
 
 
 
@@ -232,40 +198,6 @@ has-props
 
 
 567
-
-pycompat
-file
-
-
-
-
-2011-11-28T10:00:47.680668Z
-26ab0db90d72e28ad0ba1e22ee510510
-2011-07-17T00:25:10.019366Z
-7335
-davidvilla-guest
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-2
 
 README.debian
 file
