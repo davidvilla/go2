@@ -1,9 +1,8 @@
-Release 1.20120101
+Release 1.20120111
 ------------------
 
 * Refactoring: new classes UserInputHandler and UserChoiceHandler
-* OrderedDict for PathFileStore
-* depends on python2.7
+* highlight and abbreviate path in the chdir-wizzard
 
 
 Release 1.20111223

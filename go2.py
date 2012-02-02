@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '1.20111228'
+VERSION = '1.20120201'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
@@ -117,7 +117,7 @@ class PathItem:
         return self.path == other.path and self.level == other.level
 
 
-def go2setup(mode='r+'):
+def go2setup():
     try:
         if ACTIVATION_CMD in config.fs.getcontents(
             os.path.join(USERDIR, '.bashrc')):
@@ -127,7 +127,7 @@ def go2setup(mode='r+'):
     except ResourceNotFoundError:
         pass
 
-    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'w') as fd:
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'a') as fd:
         fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
         print('Setting up go2. It will be ready in next shell session.')
 
@@ -911,6 +911,12 @@ class Go2ListOnly(Go2Base):
 
 
 def create_directory_wizzard(path):
+
+    def show_make_and_change(path):
+        path = config.matcher.high_pattern(path)
+        path = abbreviate_home_prefix(path)
+        print("go2: Making and changing to directory '%s'." % path)
+
     basetarget = os.path.basename(path)
     print "cd: '%s' does not exist. (c)ancel, (s)earch or (m)ake? (C/s/m):" % basetarget,
 
@@ -931,7 +937,7 @@ def create_directory_wizzard(path):
             print e
             sys.exit(1)
 
-        print("go2: Making and changing to directory '%s'." % path)
+        show_make_and_change(path)
         save_in_history(path)
         save_target(path)
         return 0

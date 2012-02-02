@@ -1,4 +1,4 @@
-#!/bin/bash --
+#!/bin/sh
 GO2TMP=~/.go2/tmp
 function go2 {
     /usr/lib/go2/go2.py $*;
