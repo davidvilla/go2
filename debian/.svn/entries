@@ -1,14 +1,14 @@
 10
 
 dir
-8133
+8135
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps/packages/go2/trunk/debian
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps
 
 
 
-2012-02-01T10:36:53.699418Z
-8133
+2012-02-01T12:14:45.708547Z
+8134
 davidvilla-guest
 has-props
 
@@ -99,7 +99,7 @@ davidvilla-guest
 
 changelog
 file
-8134
+
 
 
 
