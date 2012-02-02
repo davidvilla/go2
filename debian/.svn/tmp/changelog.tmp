@@ -1,52 +1,58 @@
-go2 (1.20111216-1) unstable; urgency=low
+go2 (1.20120201-1) unstable; urgency=low
 
   * New release
 
- -- David Villa Alises <David.Villa@uclm.es>  Fri, 16 Dec 2011 17:11:24 +0100
+ -- David Villa Alises <David.Villa@uclm.es>  Wed, 01 Feb 2012 13:05:19 +0100
 
-go2 (1.20111028-1) unstable; urgency=low
+go2 (1.20120123-1) UNRELEASED; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@uclm.es>  Mon, 23 Jan 2012 20:04:24 +0100
+
+go2 (1.20111028-1) UNRELEASED; urgency=low
 
   * New release
 
  -- David Villa Alises <David.Villa@uclm.es>  Mon, 28 Nov 2011 00:39:23 +0100
 
-go2 (1.20111011-1) unstable; urgency=low
+go2 (1.20111011-1) UNRELEASED; urgency=low
 
   * New relsease
 
  -- David Villa Alises <David.Villa@uclm.es>  Fri, 11 Nov 2011 11:53:01 +0100
 
-go2 (1.20111009-1) unstable; urgency=low
+go2 (1.20111009-1) UNRELEASED; urgency=low
 
   * New release
 
  -- David Villa Alises <David.Villa@uclm.es>  Wed, 09 Nov 2011 12:32:35 +0100
 
-go2 (1.20111008-1) unstable; urgency=low
+go2 (1.20111008-1) UNRELEASED; urgency=low
 
   * New release
 
  -- David Villa Alises <David.Villa@uclm.es>  Tue, 08 Nov 2011 22:50:59 +0100
 
-go2 (1.20110916-1) unstable; urgency=low
+go2 (1.20110916-1) UNRELEASED; urgency=low
 
   * New release
 
  -- David Villa Alises <David.Villa@uclm.es>  Sat, 24 Sep 2011 17:34:34 +0200
 
-go2 (1.20110818-1) unstable; urgency=low
+go2 (1.20110818-1) UNRELEASED; urgency=low
 
   * Add Vcs-* fields.
 
  -- Jakub Wilk <jwilk@debian.org>  Sat, 10 Sep 2011 01:54:44 +0200
 
-go2 (1.20110805-1) unstable; urgency=low
+go2 (1.20110805-1) UNRELEASED; urgency=low
 
   * New upstream release
 
  -- David Villa Alises <David.Villa@uclm.es>  Thu, 18 Aug 2011 01:37:09 +0200
 
-go2 (0.20110717-1) unstable; urgency=low
+go2 (0.20110717-1) UNRELEASED; urgency=low
 
   * New upstream release
 
