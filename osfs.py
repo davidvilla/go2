@@ -94,14 +94,16 @@ def convert_os_errors(func):
     return wrapper
 
 
-
 class OSFS(object):
     def __init__(self, root):
         self.root = root
 
-    def makedir(self, path, allow_recreate=False):
+    def makedir(self, path, recursive=False, allow_recreate=False):
         try:
-            os.mkdir(path)
+            if recursive:
+                os.makedirs(path)
+            else:
+                os.mkdir(path)
         except OSError, e:
             if e.errno in [errno.EEXIST, 183]:
                 if self.isfile(path):

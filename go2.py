@@ -280,7 +280,6 @@ class PathFileStore:
     def add_visit(self, path):
         assert isinstance(path, unicode), path
         visits = self.data.get(path, 0)
-        del self.data[path]
         self.data[path] = visits + 1
         return self
 
@@ -917,8 +916,9 @@ def create_directory_wizzard(path):
         path = abbreviate_home_prefix(path)
         print("go2: Making and changing to directory '%s'." % path)
 
-    basetarget = os.path.basename(path)
-    print "cd: '%s' does not exist. (c)ancel, (s)earch or (m)ake? (C/s/m):" % basetarget,
+    if path.startswith(CWD):
+        target = os.path.abspath(path)[len(CWD):].strip('/')
+    print "cd: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
 
     try:
         answer = raw_input().lower()
@@ -927,12 +927,12 @@ def create_directory_wizzard(path):
         print
 
     if len(answer) != 1 or answer not in 'sm':
-        print 'Canceled'
+        message(u'canceled')
         return 1
 
     if answer == 'm':
         try:
-            config.fs.makedir(path)
+            config.fs.makedir(path, recursive=True)
         except OSError, e:
             print e
             sys.exit(1)
