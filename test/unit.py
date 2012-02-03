@@ -6,7 +6,7 @@ import os
 import time
 import multiprocessing as mp
 
-from unittest2 import TestCase
+from unittest import TestCase
 
 import fs
 from fs.memoryfs import MemoryFS

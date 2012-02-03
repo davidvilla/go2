@@ -5,7 +5,7 @@ import time
 import multiprocessing as mp
 import socket
 
-import unittest2 as unittest
+from unittest import TestCase
 from pyDoubles.framework import empty_spy, empty_stub, \
     when, assert_that_was_called
 
@@ -27,7 +27,7 @@ def pipe():
     return read_end, write_end
 
 
-class Test_Search(unittest.TestCase):
+class Test_Search(TestCase):
     def setUp(self):
         go2.config = go2.get_config()
 
