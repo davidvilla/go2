@@ -177,9 +177,18 @@ class MatchLevel:
 
 class PathMatcher(object):
     def __init__(self, pattern):
-        # FIXME: precompute RE
+        self.pre_compute(pattern)
+
+    def pre_compute(self, pattern):
         self.re_start = self.pattern2re_start(pattern)
         self.re_contain = self.pattern2re_contain(pattern)
+        self.test_pattern(pattern)
+
+    def test_pattern(self, pattern):
+        try:
+            re.match(self.re_start, "")
+        except re.error:
+            self.pre_compute([re.escape(x) for x in pattern])
 
     def match(self, path):
         if re.match(self.re_start, path, re.UNICODE):
