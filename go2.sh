@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/sh --
 GO2TMP=~/.go2/tmp
-function go2 {
+go2 () {
     /usr/lib/go2/go2.py $*;
     if [ -e $GO2TMP ]; then
 	cd "$(cat $GO2TMP)"

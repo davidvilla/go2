@@ -1,14 +1,14 @@
 10
 
 dir
-8136
+8158
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps/packages/go2/trunk/debian
 svn+ssh://davidvilla-guest@svn.debian.org/svn/python-apps
 
 
 
-2012-02-02T21:54:06.821293Z
-8136
+2012-02-03T11:37:02.549556Z
+8137
 davidvilla-guest
 has-props
 
@@ -103,33 +103,11 @@ file
 
 
 
-2012-02-03T01:06:03.000000Z
-acc296d780793b6bf9f5f1009e2f7f89
-2012-02-02T21:54:06.821293Z
-8136
+
+9da2061dbbea8c0db70cb3203e628954
+2012-02-03T11:37:02.549556Z
+8137
 davidvilla-guest
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-6174
 
 copyright
 file

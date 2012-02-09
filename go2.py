@@ -58,7 +58,6 @@ import shlex
 from traceback import print_exc
 from itertools import cycle
 from fnmatch import fnmatch
-from collections import OrderedDict
 
 import gobject
 import argparse
@@ -238,7 +237,7 @@ class PathFileStore:
     def __init__(self, path, size=1000):
         self.path = path
         self.size = size
-        self.data = OrderedDict()
+        self.data = {}
         self.load()
 #        self.log = logging.getLogger('PathFileStore [%s]' % os.path.split(path)[-1])
 
@@ -271,9 +270,9 @@ class PathFileStore:
 
     def __iter__(self):
         def _cmp(p1, p2):
-            retval = -cmp(p1[1], p2[1])
+            retval = -cmp(p1[1], p2[1])  # visits
             if retval == 0:
-                return cmp(p1[0], p2[0])
+                return cmp(p1[0], p2[0])  # names
 
             return retval
 
