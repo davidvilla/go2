@@ -1,0 +1,10 @@
+#!/usr/bin/atheist
+# -*- mode:python; coding:utf-8 -*-
+
+import signal
+
+go2 = TestBG('./go2.py -r sha',
+             signal=signal.SIGINT, expected=1,
+             post=Not(ProcessRunning('tree')))
+
+TaskTerminator(go2, delay=8)
