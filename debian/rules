@@ -19,5 +19,5 @@ override_dh_auto_clean:
 
 get-orig-source:
 	$(ORIG_REPO) $(ORIG_DIR)
-	tar $(EXCLUDE) -czf ../$(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
+	tar $(EXCLUDE) -czf $(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
 	$(RM) -r $(ORIG_DIR)
