@@ -1,4 +1,20 @@
-go2 (1.20120203-1) unstable; urgency=low
+go2 (1.20120217-1) unstable; urgency=low
+
+  * New release
+  * /usr/bin/go2 does not require bash
+  * debian/dirs empty: removed
+  * debian/pycompat not required: removed
+  * debian/rules get-orig-source produces tarball y current dir
+  * debian/control:
+    * python2.7 not required
+    * X-Python-Version removed
+    * minor typo in description field
+    * installation instruction removed
+  * Thanks to Piotr Ożarowski
+
+ -- David Villa Alises <David.Villa@uclm.es>  Fri, 17 Feb 2012 00:25:41 +0100
+
+go2 (1.20120203-1) UNRELEASED; urgency=low
 
   * New release
 
