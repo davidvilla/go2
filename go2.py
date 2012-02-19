@@ -70,8 +70,13 @@ HIGH = chr(27) + '[1m'
 LOW  = chr(27) + '[m'
 
 
-CWD        = os.getcwd()
-USERDIR    = os.environ['HOME']
+USERDIR = os.environ['HOME']
+
+try:
+    CWD = os.getcwd()
+except OSError:
+    CWD = USERDIR
+
 GO2DIR     = os.path.join(USERDIR, '.go2')
 GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
@@ -922,11 +927,11 @@ def create_directory_wizzard(path):
     def show_make_and_change(path):
         path = config.matcher.high_pattern(path)
         path = abbreviate_home_prefix(path)
-        print("go2: Making and changing to directory '%s'." % path)
+        print("go2: Making and changing to directory:\n%s." % path)
 
     if path.startswith(CWD):
         target = os.path.abspath(path)[len(CWD):].strip('/')
-    print "cd: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
 
     try:
         answer = raw_input().lower()
