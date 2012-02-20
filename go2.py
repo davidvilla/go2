@@ -888,6 +888,10 @@ class Go2Interactive(Go2Base):
         sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
         atexit.register(stdout_restore)
 
+# fl = fcntl.fcntl(fd.fileno(), fcntl.F_GETFL)
+# fl |= os.O_SYNC # or os.O_DSYNC (if you don't care the file timestamp updates)
+# fcntl.fcntl(fd.fileno(), fcntl.F_SETFL, fl)
+
     def end_checker(self):
         if self.menu.is_full:
             message(u"warning: too many matches!")
