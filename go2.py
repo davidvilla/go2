@@ -140,7 +140,7 @@ def go2setup():
 
 
 def rprint(text=''):
-    sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
+    sys.stdout.write("\r{0}\r".format(text.encode(config.encoding)))
 #    sys.stdout.flush()
 
 
@@ -946,7 +946,7 @@ def create_directory_wizzard(path):
     def show_make_and_change(path):
         path = config.matcher.high_pattern(path)
         path = abbreviate_home_prefix(path)
-        print("go2: Making and changing to directory:\n%s." % path)
+        print("go2: Making and changing to directory: %s." % path)
 
     if path.startswith(CWD):
         target = os.path.abspath(path)[len(CWD):].strip('/')
