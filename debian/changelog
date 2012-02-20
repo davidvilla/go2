@@ -4,7 +4,7 @@ go2 (1.20120217-1) unstable; urgency=low
   * /usr/bin/go2 does not require bash
   * debian/dirs empty: removed
   * debian/pycompat not required: removed
-  * debian/rules get-orig-source produces tarball y current dir
+  * debian/rules get-orig-source produces tarball in current dir
   * debian/control:
     * python2.7 not required
     * X-Python-Version removed

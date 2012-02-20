@@ -49,6 +49,7 @@ import signal
 import re
 import logging
 import locale
+import atexit
 
 from threading import Thread
 import multiprocessing as mp
@@ -122,23 +123,25 @@ class PathItem:
 
 
 def go2setup():
+    bashrc = os.path.join(USERDIR, '.bashrc')
+    open_flags = 'a'
+
     try:
-        if ACTIVATION_CMD in config.fs.getcontents(
-            os.path.join(USERDIR, '.bashrc')):
+        if ACTIVATION_CMD in config.fs.getcontents(bashrc):
             print('go2 already configured, skipping.')
             return 1
 
     except ResourceNotFoundError:
-        pass
+        open_flags = 'w'
 
-    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'a') as fd:
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), open_flags) as fd:
         fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
         print('Setting up go2. It will be ready in next shell session.')
 
 
 def rprint(text=''):
     sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
-    sys.stdout.flush()
+#    sys.stdout.flush()
 
 
 def message(text):
@@ -729,7 +732,7 @@ class Menu(Sink):
 
     def out_write(self, text):
         self.fd.write(text)
-        self.fd.flush()
+#        self.fd.flush()
 
 
 def user_break_checker(key):
@@ -800,12 +803,17 @@ class Go2Base(object):
         self.reactor = QueueReactor()
         self.path_buffer = PathBuffer()
 
-        self.setup_ignore()
-        self.setup_tty()
+        self.setup_stdin()
 
+        self.setup_ignore()
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
         self.reactor.timeout_add(250, self.end_checker)
+
+    def setup_stdin(self):
+        stdin_tty = TTY()
+        stdin_tty.set_raw()
+        atexit.register(stdin_tty.restore)
 
     def setup_ignore(self):
         try:
@@ -814,10 +822,8 @@ class Go2Base(object):
         except ResourceNotFoundError:
             pass
 
-    def setup_tty(self):
-        tty = TTY()
-        tty.set_raw()
-        self.reactor.at_quit(tty.restore)
+    def stop(self, *args):
+        self.pool.terminate()
 
     def run(self):
         retval = 1
@@ -865,6 +871,8 @@ class Go2Base(object):
 class Go2Interactive(Go2Base):
     def __init__(self):
         Go2Base.__init__(self)
+        self.setup_stdout()
+
         self.menu = Menu(self.reactor, sys.stdout)
         self.menu.formatter = high_pattern_formatter
         self.path_buffer.set_sink(self.menu)
@@ -872,6 +880,13 @@ class Go2Interactive(Go2Base):
         self.reactor.io_add_watch(sys.stdin, UserChoiceHandler(self.menu))
 
         self.progress = cycle(range(4))
+
+    def setup_stdout(self):
+        def stdout_restore():
+            sys.stdout = sys.__stdout__
+
+        sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+        atexit.register(stdout_restore)
 
     def end_checker(self):
         if self.menu.is_full:
@@ -1062,5 +1077,5 @@ if __name__ == '__main__':
         config.parser.print_help()
         sys.exit(1)
 
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, config.engine.stop)
     sys.exit(config.engine().run())

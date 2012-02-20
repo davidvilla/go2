@@ -4,7 +4,7 @@
 import signal
 
 go2 = TestBG('./go2.py -r sha',
-             signal=signal.SIGINT, expected=1,
+             signal=signal.SIGTERM, expected=-15,
              post=Not(ProcessRunning('tree')))
 
 TaskTerminator(go2, delay=8)
