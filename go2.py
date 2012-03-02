@@ -140,12 +140,12 @@ def go2setup():
 
 
 def rprint(text=''):
-    sys.stdout.write("\r{0}\r".format(text.encode(config.encoding)))
+    sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
 #    sys.stdout.flush()
 
 
 def message(text):
-    rprint("({0})\n".format(text))
+    rprint("({0})\r\n".format(text))
 
 
 def high(text):
@@ -411,12 +411,31 @@ class CommandProvider:
 
 
 def tree_provider(path):
-    path = os.path.abspath(path)
-
-    if not config.fs.isdir(path):
-        message("'{0}' does not exist".format(path))
+    assert os.path.isabs(path)
+    assert config.fs.isdir(path)
 
     return CommandProvider('tree -dfin --noreport %s' % path)
+
+
+def walk_provider(path):
+    print 'walk_provider'
+    assert os.path.isabs(path)
+    assert config.fs.isdir(path)
+
+    for root, dirnames, filenames in os.walk(path):
+        paths = [os.path.join(root, x) for x in dirnames
+                 if not x.startswith('.')]
+
+        for path in paths:
+            #FIXME: refactor this, is repeated in all providers
+            level = config.matcher.match(path)
+            if level == MatchLevel.NO_MATCH:
+                continue
+
+            if not config.fs.exists(path):
+                continue
+
+            yield PathItem(path, level)
 
 
 class CancelException(Go2Exception):
@@ -732,7 +751,7 @@ class Menu(Sink):
 
     def out_write(self, text):
         self.fd.write(text)
-#        self.fd.flush()
+        self.fd.flush()
 
 
 def user_break_checker(key):
@@ -859,7 +878,12 @@ class Go2Base(object):
 #        paths.extend(self.not_overlapped_history())
 
         for path in paths:
+            path = os.path.abspath(path)
+            if not config.fs.isdir(path):
+                message("'{0}' does not exist".format(path))
+
             self.pool.add_task(tree_provider, path)
+#            self.pool.add_task(walk_provider, path)
 
     def end_checker(self):
         return False
@@ -917,7 +941,7 @@ class Go2Interactive(Go2Base):
         return False
 
     def on_success(self):
-        rprint(u"Changing to: {0}\n".format(
+        rprint(u"Changing to: {0}\r\n".format(
                 high(abbreviate_home_prefix(self.menu.target))))
 
         save_target(self.menu.target)
