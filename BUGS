@@ -58,3 +58,13 @@ $ go2 c++
 
 
 -------------------------------------------------------
+
+not/existing/path$ cd ..
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1075, in <module>
+    sys.exit(chdir_decorator())
+  File "/usr/lib/go2/go2.py", line 988, in chdir_decorator
+    target = os.path.abspath(params)
+  File "/usr/lib/python2.7/posixpath.py", line 345, in abspath
+    cwd = os.getcwdu()
+OSError: [Errno 2] No such file or directory
