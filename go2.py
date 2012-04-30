@@ -49,6 +49,7 @@ import signal
 import re
 import logging
 import locale
+import atexit
 
 from threading import Thread
 import multiprocessing as mp
@@ -70,8 +71,13 @@ HIGH = chr(27) + '[1m'
 LOW  = chr(27) + '[m'
 
 
-CWD        = os.getcwd()
-USERDIR    = os.environ['HOME']
+USERDIR = os.environ['HOME']
+
+try:
+    CWD = os.getcwd()
+except OSError:
+    CWD = USERDIR
+
 GO2DIR     = os.path.join(USERDIR, '.go2')
 GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
@@ -117,27 +123,29 @@ class PathItem:
 
 
 def go2setup():
+    bashrc = os.path.join(USERDIR, '.bashrc')
+    open_flags = 'a'
+
     try:
-        if ACTIVATION_CMD in config.fs.getcontents(
-            os.path.join(USERDIR, '.bashrc')):
+        if ACTIVATION_CMD in config.fs.getcontents(bashrc):
             print('go2 already configured, skipping.')
             return 1
 
     except ResourceNotFoundError:
-        pass
+        open_flags = 'w'
 
-    with config.fs.open(os.path.join(USERDIR, '.bashrc'), 'a') as fd:
+    with config.fs.open(os.path.join(USERDIR, '.bashrc'), open_flags) as fd:
         fd.write("{0}\n{1}\n".format(ACTIVATION_CMD, CD_MODE_CMD))
         print('Setting up go2. It will be ready in next shell session.')
 
 
 def rprint(text=''):
     sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
-    sys.stdout.flush()
+#    sys.stdout.flush()
 
 
 def message(text):
-    rprint("({0})\n".format(text))
+    rprint("({0})\r\n".format(text))
 
 
 def high(text):
@@ -403,12 +411,31 @@ class CommandProvider:
 
 
 def tree_provider(path):
-    path = os.path.abspath(path)
-
-    if not config.fs.isdir(path):
-        message("'{0}' does not exist".format(path))
+    assert os.path.isabs(path)
+    assert config.fs.isdir(path)
 
     return CommandProvider('tree -dfin --noreport %s' % path)
+
+
+def walk_provider(path):
+    print 'walk_provider'
+    assert os.path.isabs(path)
+    assert config.fs.isdir(path)
+
+    for root, dirnames, filenames in os.walk(path):
+        paths = [os.path.join(root, x) for x in dirnames
+                 if not x.startswith('.')]
+
+        for path in paths:
+            #FIXME: refactor this, is repeated in all providers
+            level = config.matcher.match(path)
+            if level == MatchLevel.NO_MATCH:
+                continue
+
+            if not config.fs.exists(path):
+                continue
+
+            yield PathItem(path, level)
 
 
 class CancelException(Go2Exception):
@@ -795,12 +822,17 @@ class Go2Base(object):
         self.reactor = QueueReactor()
         self.path_buffer = PathBuffer()
 
-        self.setup_ignore()
-        self.setup_tty()
+        self.setup_stdin()
 
+        self.setup_ignore()
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
         self.reactor.timeout_add(250, self.end_checker)
+
+    def setup_stdin(self):
+        stdin_tty = TTY()
+        stdin_tty.set_raw()
+        atexit.register(stdin_tty.restore)
 
     def setup_ignore(self):
         try:
@@ -809,10 +841,8 @@ class Go2Base(object):
         except ResourceNotFoundError:
             pass
 
-    def setup_tty(self):
-        tty = TTY()
-        tty.set_raw()
-        self.reactor.at_quit(tty.restore)
+    def stop(self, *args):
+        self.pool.terminate()
 
     def run(self):
         retval = 1
@@ -848,7 +878,12 @@ class Go2Base(object):
 #        paths.extend(self.not_overlapped_history())
 
         for path in paths:
+            path = os.path.abspath(path)
+            if not config.fs.isdir(path):
+                message("'{0}' does not exist".format(path))
+
             self.pool.add_task(tree_provider, path)
+#            self.pool.add_task(walk_provider, path)
 
     def end_checker(self):
         return False
@@ -860,6 +895,8 @@ class Go2Base(object):
 class Go2Interactive(Go2Base):
     def __init__(self):
         Go2Base.__init__(self)
+        self.setup_stdout()
+
         self.menu = Menu(self.reactor, sys.stdout)
         self.menu.formatter = high_pattern_formatter
         self.path_buffer.set_sink(self.menu)
@@ -867,6 +904,17 @@ class Go2Interactive(Go2Base):
         self.reactor.io_add_watch(sys.stdin, UserChoiceHandler(self.menu))
 
         self.progress = cycle(range(4))
+
+    def setup_stdout(self):
+        def stdout_restore():
+            sys.stdout = sys.__stdout__
+
+        sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+        atexit.register(stdout_restore)
+
+# fl = fcntl.fcntl(fd.fileno(), fcntl.F_GETFL)
+# fl |= os.O_SYNC # or os.O_DSYNC (if you don't care the file timestamp updates)
+# fcntl.fcntl(fd.fileno(), fcntl.F_SETFL, fl)
 
     def end_checker(self):
         if self.menu.is_full:
@@ -893,7 +941,7 @@ class Go2Interactive(Go2Base):
         return False
 
     def on_success(self):
-        rprint(u"Changing to: {0}\n".format(
+        rprint(u"Changing to: {0}\r\n".format(
                 high(abbreviate_home_prefix(self.menu.target))))
 
         save_target(self.menu.target)
@@ -922,11 +970,11 @@ def create_directory_wizzard(path):
     def show_make_and_change(path):
         path = config.matcher.high_pattern(path)
         path = abbreviate_home_prefix(path)
-        print("go2: Making and changing to directory '%s'." % path)
+        print("go2: Making and changing to directory: %s." % path)
 
     if path.startswith(CWD):
         target = os.path.abspath(path)[len(CWD):].strip('/')
-    print "cd: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
 
     try:
         answer = raw_input().lower()
@@ -1057,5 +1105,5 @@ if __name__ == '__main__':
         config.parser.print_help()
         sys.exit(1)
 
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, config.engine.stop)
     sys.exit(config.engine().run())

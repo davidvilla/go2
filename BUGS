@@ -58,3 +58,33 @@ $ go2 c++
 
 
 -------------------------------------------------------
+
+not/existing/path$ cd ..
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1075, in <module>
+    sys.exit(chdir_decorator())
+  File "/usr/lib/go2/go2.py", line 988, in chdir_decorator
+    target = os.path.abspath(params)
+  File "/usr/lib/python2.7/posixpath.py", line 345, in abspath
+    cwd = os.getcwdu()
+OSError: [Errno 2] No such file or directory
+
+-------------------------------------------------------
+
+$ cd /usr/share/texmf-texlive/tex/latex/arco/arco-listings.sty
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1058, in <module>
+      sys.exit(create_directory_wizzard(target.args[0]))
+        File "/usr/lib/go2/go2.py", line 934, in
+create_directory_wizzard
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake?
+(C/s/m):" % target,
+UnboundLocalError: local variable 'target' referenced before assignment
+
+$ cd ../...
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1058, in <module>
+    sys.exit(create_directory_wizzard(target.args[0]))
+  File "/usr/lib/go2/go2.py", line 934, in create_directory_wizzard
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+UnboundLocalError: local variable 'target' referenced before assignment
