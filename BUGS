@@ -56,7 +56,6 @@ $ cd not/existing/path
 
 $ go2 c++
 
-
 -------------------------------------------------------
 
 not/existing/path$ cd ..
@@ -70,6 +69,24 @@ Traceback (most recent call last):
 OSError: [Errno 2] No such file or directory
 
 -------------------------------------------------------
+
+$ cd /usr/share/texmf-texlive/tex/latex/arco/arco-listings.sty
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1058, in <module>
+      sys.exit(create_directory_wizzard(target.args[0]))
+        File "/usr/lib/go2/go2.py", line 934, in
+create_directory_wizzard
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake?
+(C/s/m):" % target,
+UnboundLocalError: local variable 'target' referenced before assignment
+
+$ cd ../...
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1058, in <module>
+    sys.exit(create_directory_wizzard(target.args[0]))
+  File "/usr/lib/go2/go2.py", line 934, in create_directory_wizzard
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+UnboundLocalError: local variable 'target' referenced before assignment
 
 $ cd /usr/share/texmf-texlive/tex/latex/arco/arco-listings.sty
 Traceback (most recent call last):
