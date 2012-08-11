@@ -529,12 +529,6 @@ class ProcessPool(object):
 
         time.sleep(0.1)
 
-#        term_threads = [ThreadStarted(target=w.terminate) for w in self.workers
-#                        if w.is_alive()]
-#
-#        for t in term_threads:
-#            t.join()
-
         for w in self.workers:
             if w.is_alive():
                 w.terminate()
@@ -872,6 +866,17 @@ class Go2Base(object):
         self.pool.add_task(from_file_provider, self.history)
         self.pool.sleep_free_workers(seconds=0.5)
         self.pool.add_task(from_file_provider, self.cache)
+
+    def not_overlapped_history(self):
+        history_paths = []
+        for p in sorted(self.history.data.keys(), key=len):
+            if any(p.startswith(x) for x in history_paths):
+                continue
+
+            history_paths.append(p)
+
+#        print str.join('\r\n', history_paths)
+        return history_paths
 
     def create_command_tasks(self):
         paths = ListUniq(config.search_path.split(':'))
