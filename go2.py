@@ -883,7 +883,6 @@ class Go2Base(object):
 #        paths.extend(self.not_overlapped_history())
 
         for path in set(paths):
-            print path
             path = os.path.abspath(path)
             if not config.fs.isdir(path):
                 message("'{0}' does not exist".format(path))
