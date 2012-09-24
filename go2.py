@@ -347,20 +347,10 @@ class CommandProvider:
         self.abort = False
         signal.signal(signal.SIGTERM, self.terminate)
 
-#    def is_alive2(self):
-#        try:
-#            self.ps.send_signal(0)
-#        except OSError:
-#            return False
-#
-#        return True
-
     def is_alive(self):
-#        return self.ps.poll() is None
         value = os.waitpid(self.ps.pid, os.WNOHANG)
         logging.debug('%s: waitpid %s ', self, value)
         return value == (0, 0)
-#        return os.waitpid(self.ps.pid, os.WNOHANG) == (0, 0)
 
     def terminate(self, *args):
         if self.abort:
@@ -644,7 +634,7 @@ class PathBuffer(object):
 #        print '\r', self.groups[item.level]
 
         if item.path in self.groups[item.level] or \
-           any(f(item.path) for f in self.filters):
+                any(f(item.path) for f in self.filters):
             return
 
         self.groups[item.level].append(item.path)
@@ -709,7 +699,7 @@ class Menu(Sink):
             raise self.InvalidChoiceException()
 
         logging.debug("choice: {0}, entries: {1}".format(
-                choice, self.entries))
+                      choice, self.entries))
 
         self.target = self.entries[choice]
         self.reactor.quit()
@@ -947,7 +937,7 @@ class Go2Interactive(Go2Base):
 
     def on_success(self):
         rprint(u"Changing to: {0}\r\n".format(
-                high(abbreviate_home_prefix(self.menu.target))))
+               high(abbreviate_home_prefix(self.menu.target))))
 
         save_target(self.menu.target)
 
@@ -1018,6 +1008,10 @@ def chdir_decorator(wizzard=False):
     except IOError, e:
         logging.error(e)
         save_target(target)
+        return 0
+    except OSError, e:
+        logging.error(e)
+        save_target(USERDIR)
         return 0
 
     if params == '-':
