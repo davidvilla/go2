@@ -19,12 +19,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '1.20120210'
+VERSION = '1.20121012'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
 
-This is version {0}, Copyright (C) 2004-2011 David Villa Alises.
+This is version {0}, Copyright (C) 2004-2012 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''
