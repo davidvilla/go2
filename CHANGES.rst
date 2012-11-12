@@ -1,3 +1,8 @@
+Release 1.20121112
+------------------
+
+* Trivial missing directory in --cd mode fixed
+
 Release 1.20120203
 ------------------
 

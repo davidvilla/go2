@@ -968,8 +968,9 @@ def create_directory_wizzard(path):
         print("go2: Making and changing to directory: %s." % path)
 
     if path.startswith(CWD):
-        target = os.path.abspath(path)[len(CWD):].strip('/')
-    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+        path = os.path.abspath(path)[len(CWD):].strip('/')
+
+    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % path,
 
     try:
         answer = raw_input().lower()
