@@ -1,3 +1,9 @@
+go2 (1.20121112-1) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@gmail.com>  Mon, 12 Nov 2012 19:57:03 +0100
+
 go2 (1.20120511-1) unstable; urgency=low
 
   * New release

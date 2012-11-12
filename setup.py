@@ -2,10 +2,8 @@
 
 from distutils.core import setup
 
-VERSION = file('debian/changelog').readline().split()[1][1:-1]
-
 setup(name         = 'go2',
-      version      = VERSION,
+      version      = '1.20121112',
       description  = 'go2 directory finder',
       author       = 'David Villa Alises',
       author_email = 'David.Villa@uclm.es>',
