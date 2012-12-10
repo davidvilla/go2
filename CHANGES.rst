@@ -1,3 +1,8 @@
+Release 0.20121210
+------------------
+
+* Bug fixed when print new created directories (--cd mode)
+
 Release 1.20121112
 ------------------
 
@@ -72,6 +77,7 @@ Release 0.20110716
 
 .. Local Variables:
 ..  coding: utf-8
+..  mode: rst
 ..  mode: flyspell
 ..  ispell-local-dictionary: "american"
 .. End:

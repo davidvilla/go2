@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '1.20121112'
+VERSION = '1.20121210'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.

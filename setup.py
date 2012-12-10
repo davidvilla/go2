@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name         = 'go2',
-      version      = '1.20121112',
+      version      = '1.20121210',
       description  = 'go2 directory finder',
       author       = 'David Villa Alises',
       author_email = 'David.Villa@uclm.es>',
