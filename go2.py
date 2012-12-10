@@ -963,9 +963,10 @@ class Go2ListOnly(Go2Base):
 def create_directory_wizzard(path):
 
     def show_make_and_change(path):
+        path = os.path.abspath(path)
         path = config.matcher.high_pattern(path)
         path = abbreviate_home_prefix(path)
-        print("go2: Making and changing to directory: %s." % path)
+        print("go2: Making and changing to directory: %s" % path)
 
     if path.startswith(CWD):
         path = os.path.abspath(path)[len(CWD):].strip('/')
