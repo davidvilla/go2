@@ -752,7 +752,6 @@ class Menu(Sink):
         return '{0:c}: {1}'.format(index, path)
 
     def out_write(self, text):
-        print "******************" + repr(text) + "******************" + str(type(text))
         self.fd.write(to_text(text))
         self.fd.flush()
 
