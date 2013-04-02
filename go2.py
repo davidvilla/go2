@@ -99,13 +99,31 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 
+def get_encoding():
+    try:
+        config_encoding = config.encoding
+    except NameError:
+        config_encoding = None
+
+    return config_encoding or 'utf8'
+
+
 def to_unicode(text, encoding=None):
-    encoding = encoding or config.encoding
+    encoding = encoding or get_encoding()
 
     if isinstance(text, unicode):
         return text
 
     return unicode(text, encoding=encoding, errors='replace')
+
+
+def to_text(text, encoding=None):
+    encoding = encoding or get_encoding()
+
+    if isinstance(text, str):
+        return text
+
+    return text.encode(encoding=encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -140,7 +158,7 @@ def go2setup():
 
 
 def rprint(text=''):
-    sys.stdout.write("\r{0}".format(text.encode(config.encoding)))
+    sys.stdout.write("\r{0}".format(to_text(text)))
 #    sys.stdout.flush()
 
 
@@ -236,7 +254,7 @@ class PathMatcher(object):
 
 
 def save_target(path):
-    config.fs.setcontents(GO2TMP, path.encode(config.encoding))
+    config.fs.setcontents(GO2TMP, to_text(path))
 
 
 class PathFileStore:
@@ -259,7 +277,7 @@ class PathFileStore:
 
     def _load_file_lines(self, fd):
         def decode(path):
-            return path.strip().decode('utf8')
+            return to_unicode(path.strip())
 
         for line in fd:
             line = line.strip()
@@ -303,13 +321,13 @@ class PathFileStore:
         with config.fs.open(self.path, 'w') as fd:
             for path, visits in self.data.items()[:self.size]:
                 line = u"{0}:{1}\n".format(visits, path)
-                fd.write(line.encode('utf8'))
+                fd.write(to_text(line))
 
     def __unicode__(self):
         return "<PathFileStore '{0}'>".format(self.path)
 
     def __repr__(self):
-        return unicode(self).encode(config.encoding)
+        return to_text(unicode(self))
 
 
 def save_in_history(path):
@@ -322,7 +340,7 @@ def from_file_provider(path_store):
         if level == MatchLevel.NO_MATCH:
             continue
 
-        if not config.fs.exists(path):
+        if not config.fs.exists(to_text(path)):
             del path_store.data[path]
             continue
 
@@ -734,7 +752,8 @@ class Menu(Sink):
         return '{0:c}: {1}'.format(index, path)
 
     def out_write(self, text):
-        self.fd.write(text)
+        print "******************" + repr(text) + "******************" + str(type(text))
+        self.fd.write(to_text(text))
         self.fd.flush()
 
 
@@ -1106,5 +1125,7 @@ if __name__ == '__main__':
         config.parser.print_help()
         sys.exit(1)
 
-    signal.signal(signal.SIGINT, config.engine.stop)
-    sys.exit(config.engine().run())
+    engine = config.engine()
+
+    signal.signal(signal.SIGINT, engine.stop)
+    sys.exit(engine.run())
