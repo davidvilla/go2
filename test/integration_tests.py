@@ -6,8 +6,7 @@ import multiprocessing as mp
 import socket
 
 from unittest import TestCase
-from pyDoubles.framework import empty_spy, empty_stub, \
-    when, assert_that_was_called
+from doublex import Stub, Spy, assert_that, called
 
 import go2
 
@@ -34,7 +33,7 @@ class Test_Search(TestCase):
     def create_scenario(self, menu_size=26):
         self.queue = mp.Queue()
         self.read_end, self.write_end = pipe()
-        self.out = empty_spy()
+        self.out = Spy()
 
         self.reactor = go2.QueueReactor()
         self.menu = go2.Menu(self.reactor, self.out, max_size=menu_size)
@@ -67,7 +66,7 @@ class Test_Search(TestCase):
         # then
         self.assertEquals(self.path_buffer.groups[0], ['bar'])
         self.assertEquals(self.menu.entries, ['bar'])
-        assert_that_was_called(self.out.write).with_args('a: bar')
+        assert_that(self.out.write, called().with_args('a: bar'))
         self.assertEquals(self.menu.target, 'bar')
 
     def test_full_menu(self):
@@ -81,7 +80,7 @@ class Test_Search(TestCase):
         self.reactor.process_pending()
 
         # then
-        assert_that_was_called(self.out.write).with_args('a: foo')
+        assert_that(self.out.write, called().with_args('a: foo'))
 
     def atest_list_mode(self):
         def raw_formatter(index, path, suffix):
@@ -90,8 +89,8 @@ class Test_Search(TestCase):
         paths = ['foo', 'bar']
 
         # given
-        pool = empty_stub()
-        when(pool.has_tasks).then_return(False)
+        with Stub() as pool:
+            pool.has_tasks().returns(False)
 
         self.create_scenario()
         self.reactor.timeout_add(250, EndChecker(
@@ -105,7 +104,7 @@ class Test_Search(TestCase):
 
         # then
         for i in paths:
-            assert_that_was_called(self.out.write).with_args(i + '\n')
+            assert_that(self.out.write, called().with_args(i + '\n'))
 
     def test_unicode(self):
         os.path.exists('ñandáéíóú')
