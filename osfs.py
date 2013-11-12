@@ -43,7 +43,7 @@ def convert_os_errors(func):
     def wrapper(self, *args, **kwds):
         try:
             return func(self, *args, **kwds)
-        except (OSError, IOError), e:
+        except (OSError, IOError) as e:
             (exc_type, exc_inst, tb) = sys.exc_info()
             path = getattr(e, "filename", None)
 
@@ -56,21 +56,21 @@ def convert_os_errors(func):
 #                raise OperationFailedError(opname,details=e),None,tb
 
             if e.errno == errno.ENOENT:
-                raise ResourceNotFoundError(path, opname=opname, details=e), None, tb
+                raise ResourceNotFoundError(path, opname=opname, details=e)
             if e.errno == errno.ESRCH:
-                raise ResourceNotFoundError(path, opname=opname, details=e), None, tb
+                raise ResourceNotFoundError(path, opname=opname, details=e)
 #            if e.errno == errno.ENOTEMPTY:
 #                raise DirectoryNotEmptyError(path, opname=opname, details=e), None, tb
             if e.errno == errno.EEXIST:
-                raise DestinationExistsError(path, opname=opname, details=e), None, tb
+                raise DestinationExistsError(path, opname=opname, details=e)
             if e.errno == 183:  # some sort of win32 equivalent to EEXIST
-                raise DestinationExistsError(path, opname=opname, details=e), None, tb
+                raise DestinationExistsError(path, opname=opname, details=e)
             if e.errno == errno.ENOTDIR:
-                raise ResourceInvalidError(path, opname=opname, details=e), None, tb
+                raise ResourceInvalidError(path, opname=opname, details=e)
             if e.errno == errno.EISDIR:
-                raise ResourceInvalidError(path, opname=opname, details=e), None, tb
+                raise ResourceInvalidError(path, opname=opname, details=e)
             if e.errno == errno.EINVAL:
-                raise ResourceInvalidError(path, opname=opname, details=e), None, tb
+                raise ResourceInvalidError(path, opname=opname, details=e)
 #            if e.errno == errno.EOPNOTSUPP:
 #                raise UnsupportedError(opname, details=e), None, tb
 
@@ -104,7 +104,7 @@ class OSFS(object):
                 os.makedirs(path)
             else:
                 os.mkdir(path)
-        except OSError, e:
+        except OSError as e:
             if e.errno in [errno.EEXIST, 183]:
                 if self.isfile(path):
                     raise ResourceInvalidError(
@@ -121,14 +121,14 @@ class OSFS(object):
 
     def getcontents(self, fpath):
         try:
-            with file(fpath) as fd:
+            with open(fpath) as fd:
                 return fd.read()
         except IOError:
             raise ResourceNotFoundError(fpath)
 
     def setcontents(self, fpath, contents):
         try:
-            with file(fpath, 'w') as fd:
+            with open(fpath, 'w') as fd:
                 fd.write(contents)
         except IOError:
             raise ResourceNotFoundError(fpath)
