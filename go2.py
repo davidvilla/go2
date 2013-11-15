@@ -1,9 +1,9 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding:utf-8; tab-width:4; mode:python -*-
 
 # go2.py
 #
-# Copyright © 2004-2011 David Villa Alises
+# Copyright © 2004-2013 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -60,7 +60,7 @@ from traceback import print_exc
 from itertools import cycle
 from fnmatch import fnmatch
 
-import gobject
+from gi.repository import GObject, GLib
 import argparse
 from osfs import OSFS, ResourceNotFoundError
 
@@ -108,22 +108,23 @@ def get_encoding():
     return config_encoding or 'utf8'
 
 
-def to_unicode(text, encoding=None):
-    encoding = encoding or get_encoding()
+# def to_unicode(text, encoding=None):
+#     encoding = encoding or get_encoding()
+#
+#     if isinstance(text, str):
+#         return text
+#
+#     return str(text, encoding=encoding, errors='replace')
 
-    if isinstance(text, unicode):
-        return text
 
-    return unicode(text, encoding=encoding, errors='replace')
-
-
-def to_text(text, encoding=None):
-    encoding = encoding or get_encoding()
-
-    if isinstance(text, str):
-        return text
-
-    return text.encode(encoding=encoding, errors='replace')
+# def to_text(text, encoding=None):
+#     encoding = encoding or get_encoding()
+#
+#     if isinstance(text, bytes):
+#         return text
+#
+#     return text.encode(encoding=encoding, errors='replace')
+# #    return text.encode(encoding=encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -131,9 +132,11 @@ class Go2Exception(Exception):
         return repr(self)
 
 
-class PathItem:
+class PathItem(object):
     def __init__(self, path, level=0):
-        self.path = to_unicode(path)
+        assert isinstance(path, str)
+
+        self.path = path
         self.level = level
 
     def __eq__(self, other):
@@ -158,7 +161,7 @@ def go2setup():
 
 
 def rprint(text=''):
-    sys.stdout.write("\r{0}".format(to_text(text)))
+    sys.stdout.write("\r{0}".format(text))
 #    sys.stdout.flush()
 
 
@@ -171,13 +174,13 @@ def high(text):
 
 
 def abbreviate_home_prefix(path):
-    return re.sub(u'^{0}'.format(USERDIR), '~', path)
+    return re.sub('^{0}'.format(USERDIR), '~', path)
 
 
 def high_pattern_formatter(index, path, suffix):
     path = config.matcher.high_pattern(path)
     path = abbreviate_home_prefix(path)
-    return u'\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
+    return '\r{0:c}: {1}{2}\r\n'.format(index, path, suffix)
 
 
 class ListUniq(list):
@@ -232,17 +235,19 @@ class PathMatcher(object):
 
     @staticmethod
     def pattern2re_start(pattern):
-        return unicode.join(u'', [u'.*/({0})[^/]*'.format(x) for x in pattern]) + u'$'
+        return str.join('', ['.*/({0})[^/]*'.format(x) for x in pattern]) + '$'
 
     @staticmethod
     def pattern2re_contain(pattern):
-        return unicode.join(u'', [u'.*/.*({0})[^/]*'.format(x) for x in pattern]) + u'$'
+        return str.join('', ['.*/.*({0})[^/]*'.format(x) for x in pattern]) + '$'
 
     def high_pattern(self, path):
         retval = ''
         begin = 0
 
         mo = re.match(self.re_contain, path, re.IGNORECASE)
+        if mo is None:
+            return path
 
         for i in range(1, mo.lastindex + 1):
             retval += mo.string[begin:mo.start(i)]
@@ -254,7 +259,7 @@ class PathMatcher(object):
 
 
 def save_target(path):
-    config.fs.setcontents(GO2TMP, to_text(path))
+    config.fs.setcontents(GO2TMP, path)
 
 
 class PathFileStore:
@@ -277,7 +282,8 @@ class PathFileStore:
 
     def _load_file_lines(self, fd):
         def decode(path):
-            return to_unicode(path.strip())
+            return path.strip()
+#            return to_unicode(path.strip())
 
         for line in fd:
             line = line.strip()
@@ -302,7 +308,9 @@ class PathFileStore:
 
             return retval
 
-        for path, visits in sorted(self.data.items(), cmp=_cmp):
+#       FIXME: python3 sorted has not "cmp"
+#        for path, visits in sorted(list(self.data.items()), cmp=_cmp):
+        for path, visits in sorted(list(self.data.items())):
             yield path
 
     def add_visit_seq(self, seq):
@@ -312,22 +320,19 @@ class PathFileStore:
         return self
 
     def add_visit(self, path):
-        assert isinstance(path, unicode), path
+        assert isinstance(path, str), path
         visits = self.data.get(path, 0)
         self.data[path] = visits + 1
         return self
 
     def save(self):
         with config.fs.open(self.path, 'w') as fd:
-            for path, visits in self.data.items()[:self.size]:
-                line = u"{0}:{1}\n".format(visits, path)
-                fd.write(to_text(line))
-
-    def __unicode__(self):
-        return "<PathFileStore '{0}'>".format(self.path)
+            for path, visits in list(self.data.items())[:self.size]:
+                line = "{0}:{1}\n".format(visits, path)
+                fd.write(line)
 
     def __repr__(self):
-        return to_text(unicode(self))
+        return "<PathFileStore '{0}'>".format(self.path)
 
 
 def save_in_history(path):
@@ -340,7 +345,8 @@ def from_file_provider(path_store):
         if level == MatchLevel.NO_MATCH:
             continue
 
-        if not config.fs.exists(to_text(path)):
+#        if not config.fs.exists(to_text(path)):
+        if not config.fs.exists(path):
             del path_store.data[path]
             continue
 
@@ -357,7 +363,7 @@ class CommandProvider:
             shell      = False,
             close_fds  = True,
             stdout     = subp.PIPE,
-            stderr     = subp.PIPE,
+#            stderr     = subp.PIPE,
             preexec_fn = os.setsid)
 
         logging.info('%s: starts', self)
@@ -388,7 +394,7 @@ class CommandProvider:
 #                os.killpg(self.ps.pid, signal.SIGKILL)
                 time.sleep(0.1)
 
-        except OSError, e:
+        except OSError as e:
             logging.error('%s: %s', self, e)
 
         # WARN: This kills the worker running this provider
@@ -400,7 +406,8 @@ class CommandProvider:
                 if self.abort:
                     return
 
-                path = path.strip()
+                path = path.strip().decode()
+                self.path_sanity_check(path)
 
                 level = config.matcher.match(path)
                 if level == MatchLevel.NO_MATCH:
@@ -414,19 +421,28 @@ class CommandProvider:
         except IOError:
             self.terminate()
 
+    def path_sanity_check(self, path):
+        pass
+
     def __str__(self):
         return "CommandProvider pid:{0} cmd:'{1}'".format(self.ps.pid, self.command)
 
 
-def tree_provider(path):
-    assert os.path.isabs(path)
-    assert config.fs.isdir(path)
+class TreeProvider(CommandProvider):
+    def __init__(self, path):
+        assert os.path.isabs(path)
+        assert config.fs.isdir(path)
+        self.path = path
+        super(TreeProvider, self).__init__(
+            command='tree -dfin --noreport "%s"' % path)
 
-    return CommandProvider('tree -dfin --noreport %s' % path)
+    def path_sanity_check(self, path):
+        if "[error opening dir]" in path:
+            print("Internal Error: %s" % path)
 
 
 def walk_provider(path):
-    print 'walk_provider'
+    print('walk_provider')
     assert os.path.isabs(path)
     assert config.fs.isdir(path)
 
@@ -494,11 +510,16 @@ class Worker(mp.Process):
         self.tasks.task_done()
 
     def push(self, source):
+        if source is None:
+            return
+
         try:
             for x in source:
                 self.output.put(x)
-        except TypeError:
-            self.output.put(source)
+        except TypeError as e:
+            print_exc()
+#            print("TypeError %s" % e)
+#            self.output.put(e)
 
 
 class TaskQueue(mp_queues.JoinableQueue):
@@ -561,7 +582,7 @@ class QueueExtractor(object):
         return True
 
 
-class QueueReactor(gobject.MainLoop):
+class QueueReactor(object):
     class Callback(object):
         def __init__(self, reactor, func):
             self.reactor = reactor
@@ -571,7 +592,7 @@ class QueueReactor(gobject.MainLoop):
             try:
                 return self.func(*args)
 
-            except Exception, e:
+            except Exception as e:
                 if not isinstance(e, Go2Exception):
                     print_exc()
 
@@ -581,24 +602,24 @@ class QueueReactor(gobject.MainLoop):
                 return False
 
     def __init__(self):
-        gobject.MainLoop.__init__(self)
-        self.context = self.get_context()
+        self.mainloop = GObject.MainLoop()
+        self.context = self.mainloop.get_context()
         self.at_quit_func = lambda: None
         self.exception = None
 
     def queue_add_watch(self, queue, func, *args):
-        gobject.io_add_watch(
-            queue._reader, gobject.IO_IN,
+        GLib.io_add_watch(
+            queue._reader, GLib.IO_IN,
             self.Callback(self, func), queue, *args,
-            priority=gobject.PRIORITY_HIGH)
+            priority=GLib.PRIORITY_HIGH)
 
     def io_add_watch(self, fd, func, *args):
-        gobject.io_add_watch(
-            fd, gobject.IO_IN,
+        GLib.io_add_watch(
+            fd, GLib.IO_IN,
             self.Callback(self, func), *args)
 
     def timeout_add(self, t, func, *args):
-        gobject.timeout_add(t, self.Callback(self, func), *args)
+        GLib.timeout_add(t, self.Callback(self, func), *args)
 
     def at_quit(self, func):
         self.at_quit_func = func
@@ -614,14 +635,14 @@ class QueueReactor(gobject.MainLoop):
 
     def run(self):
         time.sleep(0.1)
-        gobject.MainLoop.run(self)
+        self.mainloop.run()
         self.at_quit_func()
         if self.exception is not None:
             raise self.exception
 
     def quit(self):
         logging.debug('reactor quit')
-        gobject.MainLoop.quit(self)
+        self.mainloop.quit()
 
     def __repr__(self):
         return self.__class__.__name__
@@ -729,11 +750,13 @@ class Menu(Sink):
         self.out_write('\r   ---        \n')
 
     def add_entry(self, entry):
+        assert isinstance(entry, str)
+
         if len(self.entries) >= self.max_size:
             self.is_full = True
             raise self.FullSinkException
 
-        self.entries.append(to_unicode(entry))
+        self.entries.append(entry)
         self.write_last()
 
     def write_last(self):
@@ -752,7 +775,7 @@ class Menu(Sink):
         return '{0:c}: {1}'.format(index, path)
 
     def out_write(self, text):
-        self.fd.write(to_text(text))
+        self.fd.write(text)
         self.fd.flush()
 
 
@@ -859,9 +882,9 @@ class Go2Base(object):
             retval = 0
 
         except CancelException:
-            message(u"canceled by user")
+            message("canceled by user")
         except NotMatchException:
-            message(u"pattern not found")
+            message("pattern not found")
 
         self.pool.terminate()
         return retval
@@ -877,7 +900,7 @@ class Go2Base(object):
 
     def not_overlapped_history(self):
         history_paths = []
-        for p in sorted(self.history.data.keys(), key=len):
+        for p in sorted(list(self.history.data.keys()), key=len):
             if any(p.startswith(x) for x in history_paths):
                 continue
 
@@ -895,7 +918,8 @@ class Go2Base(object):
             if not config.fs.isdir(path):
                 message("'{0}' does not exist".format(path))
 
-            self.pool.add_task(tree_provider, path)
+#            print("add task: " + path)
+            self.pool.add_task(TreeProvider, path)
 #            self.pool.add_task(walk_provider, path)
 
     def end_checker(self):
@@ -916,13 +940,13 @@ class Go2Interactive(Go2Base):
 
         self.reactor.io_add_watch(sys.stdin, UserChoiceHandler(self.menu))
 
-        self.progress = cycle(range(4))
+        self.progress = cycle(list(range(4)))
 
     def setup_stdout(self):
         def stdout_restore():
             sys.stdout = sys.__stdout__
 
-        sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+        sys.stdout = os.fdopen(sys.stdout.fileno(), 'w')
         atexit.register(stdout_restore)
 
 # fl = fcntl.fcntl(fd.fileno(), fcntl.F_GETFL)
@@ -931,13 +955,13 @@ class Go2Interactive(Go2Base):
 
     def end_checker(self):
         if self.menu.is_full:
-            message(u"warning: too many matches!")
+            message("warning: too many matches!")
             rprint('Select path: ')
             self.pool.terminate()
             return False
 
         if self.pool.has_tasks():
-            rprint(u"\rSearching{0:3} ".format('.' * self.progress.next()))
+            rprint("\rSearching{0:3} ".format('.' * next(self.progress)))
             return True
 
         self.path_buffer.flush_alternate()
@@ -946,15 +970,15 @@ class Go2Interactive(Go2Base):
             raise NotMatchException
 
         if len(self.menu.entries) == 1:
-            message(u"single match")
+            message("single match")
             self.menu.perform_choice(0)
             return False
 
-        rprint(u"Select path: ")
+        rprint("Select path: ")
         return False
 
     def on_success(self):
-        rprint(u"Changing to: {0}\r\n".format(
+        rprint("Changing to: {0}\r\n".format(
                high(abbreviate_home_prefix(self.menu.target))))
 
         save_target(self.menu.target)
@@ -984,28 +1008,28 @@ def create_directory_wizzard(path):
         path = os.path.abspath(path)
         path = config.matcher.high_pattern(path)
         path = abbreviate_home_prefix(path)
-        print("go2: Making and changing to directory: %s" % path)
+        print(("go2: Making and changing to directory: %s" % path))
 
     if path.startswith(CWD):
         path = os.path.abspath(path)[len(CWD):].strip('/')
 
-    print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % path,
+    print("go2: '{}' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):".format(path), end=" ")
 
     try:
-        answer = raw_input().lower()
+        answer = input().lower()
     except KeyboardInterrupt:
         answer = ''
         print
 
     if len(answer) != 1 or answer not in 'sm':
-        message(u'canceled')
+        message('canceled')
         return 1
 
     if answer == 'm':
         try:
             config.fs.makedir(path, recursive=True)
-        except OSError, e:
-            print e
+        except OSError as e:
+            print(e)
             sys.exit(1)
 
         show_make_and_change(path)
@@ -1025,11 +1049,11 @@ def chdir_decorator(wizzard=False):
     params = str.join(' ', config.pattern)
     try:
         target = os.path.abspath(params)
-    except IOError, e:
+    except IOError as e:
         logging.error(e)
         save_target(target)
         return 0
-    except OSError, e:
+    except OSError as e:
         logging.error(e)
         save_target(USERDIR)
         return 0
@@ -1083,7 +1107,9 @@ def get_config(args=None):
     retval.engine = Go2ListOnly if retval.listonly else Go2Interactive
 
     retval.encoding = encoding
-    retval.pattern = [to_unicode(x, encoding) for x in retval.pattern]
+#    print(retval.pattern)
+#    print(retval.pattern, type(retval.pattern[0]))
+#    retval.pattern = [to_unicode(x, encoding) for x in retval.pattern]
 
     # process args
     if retval.ignorecase:
@@ -1116,7 +1142,7 @@ if __name__ == '__main__':
     if config.chdir:
         try:
             sys.exit(chdir_decorator())
-        except NotExistsException, target:
+        except NotExistsException as target:
             sys.exit(create_directory_wizzard(target.args[0]))
 
     if not config.pattern:
