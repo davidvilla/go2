@@ -437,8 +437,13 @@ class TreeProvider(CommandProvider):
             command='tree -dfin --noreport "%s"' % path)
 
     def path_sanity_check(self, path):
-        if "[error opening dir]" in path:
-            print("Internal Error: %s" % path)
+        errormsg = "[error opening dir]"
+        if not errormsg in path:
+            return
+
+        path = path.replace(errormsg, "")
+        logging.error(path)
+        rprint("(go2) access error: %s\n" % path)
 
 
 def walk_provider(path):
@@ -1146,7 +1151,7 @@ if __name__ == '__main__':
             sys.exit(create_directory_wizzard(target.args[0]))
 
     if not config.pattern:
-        print("go2.py: error: too few arguments\n")
+        print("(go2) error: too few arguments\n")
         config.parser.print_help()
         sys.exit(1)
 
