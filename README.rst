@@ -10,20 +10,20 @@ for bash.
 
 Features:
 
-# cache of recent searches;
-# history list of visited directories;
-# blacklist of directories not to search;
-# configuration file for default options;
-# multithreaded execution.
+- cache of recent searches;
+- history list of visited directories;
+- blacklist of directories not to search;
+- configuration file for default options;
+- multithreaded execution.
 
 Similar programs
 ----------------
 
-# wcd
-# kcd
-# cdargs
-# apparix
-# autojump
+- wcd
+- kcd
+- cdargs
+- apparix
+- autojump
 
 Instalation
 -----------
