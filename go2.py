@@ -19,12 +19,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '2.20131126'
+VERSION = '2.20140210'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
 
-This is version {0}, Copyright (C) 2004-2012 David Villa Alises.
+This is version {0}, Copyright (C) 2004-2014 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''
@@ -317,10 +317,10 @@ class PathFileStore:
             self.add_visit(path)
         return self
 
-    def add_visit(self, path):
+    def add_visit(self, path, how_many=1):
         assert isinstance(path, str), path
         visits = self.data.get(path, 0)
-        self.data[path] = visits + 1
+        self.data[path] = visits + how_many
         return self
 
     def save(self):
@@ -333,8 +333,8 @@ class PathFileStore:
         return "<PathFileStore '{0}'>".format(self.path)
 
 
-def save_in_history(path):
-    PathFileStore(GO2HISTORY).add_visit(path).save()
+def save_in_history(path, how_many):
+    PathFileStore(GO2HISTORY).add_visit(path, how_many).save()
 
 
 def from_file_provider(path_store):
@@ -1036,7 +1036,7 @@ def create_directory_wizzard(path):
             sys.exit(1)
 
         show_make_and_change(path)
-        save_in_history(path)
+        save_in_history(path, 10)
         save_target(path)
         return 0
 
@@ -1066,7 +1066,7 @@ def chdir_decorator(wizzard=False):
         return 0
 
     if config.fs.isdir(target):
-        save_in_history(target)
+        save_in_history(target, 50)
         save_target(target)
         return 0
 
