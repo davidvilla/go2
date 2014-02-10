@@ -1,0 +1,9 @@
+[default]
+## providers: any of [cache, history, cwd, home, root]
+# providers = cache, history, home
+
+## ignore: directory list
+# ignore = .*, /tmp, /var/cache
+
+## auto_chdir: true | false
+# auto_chdir = false

@@ -3,7 +3,7 @@
 
 # go2.py
 #
-# Copyright © 2004-2013 David Villa Alises
+# Copyright © 2004-2014 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,8 +38,6 @@ try:
     sys.path.remove(os.getcwd())
 except (OSError, ValueError):
     pass
-
-#os.environ['LANG'] = 'C'
 
 import pwd
 import tty
@@ -345,8 +343,7 @@ def from_file_provider(path_store):
         if level == MatchLevel.NO_MATCH:
             continue
 
-#        if not config.fs.exists(to_text(path)):
-        if not config.fs.exists(path):
+        if not config.fs.isdir(path):
             del path_store.data[path]
             continue
 
@@ -413,7 +410,7 @@ class CommandProvider:
                 if level == MatchLevel.NO_MATCH:
                     continue
 
-                if not config.fs.exists(path):
+                if not config.fs.isdir(path):
                     continue
 
                 yield PathItem(path, level)
@@ -461,7 +458,7 @@ def walk_provider(path):
             if level == MatchLevel.NO_MATCH:
                 continue
 
-            if not config.fs.exists(path):
+            if not config.fs.isdir(path):
                 continue
 
             yield PathItem(path, level)
@@ -550,6 +547,7 @@ class ProcessPool(object):
             self.add_task(time.sleep, seconds)
 
     def has_tasks(self):
+        time.sleep(0.1)
         return self.task_queue.unfinished_tasks_count() != 0
 
     def terminate(self):
@@ -573,7 +571,7 @@ class ProcessPool(object):
         while self.has_tasks():
             time.sleep(0.1)
 
-        self.terminate()
+#        self.terminate()
 
 
 class QueueExtractor(object):
@@ -639,7 +637,7 @@ class QueueReactor(object):
         self.context.iteration()
 
     def run(self):
-        time.sleep(0.1)
+#        time.sleep(0.1)
         self.mainloop.run()
         self.at_quit_func()
         if self.exception is not None:
@@ -846,7 +844,7 @@ class IgnoreManager(object):
         return retval
 
 
-class Go2Base(object):
+class Go2Base:
     def __init__(self):
         self.pool = ProcessPool()
         self.reactor = QueueReactor()
@@ -857,7 +855,6 @@ class Go2Base(object):
         self.setup_ignore()
         self.reactor.queue_add_watch(self.pool.output_queue,
                                      QueueExtractor(self.path_buffer.add))
-        self.reactor.timeout_add(250, self.end_checker)
 
     def setup_stdin(self):
         stdin_tty = TTY()
@@ -880,6 +877,7 @@ class Go2Base(object):
         self.cache = PathFileStore(GO2CACHE)
 
         self.create_tasks()
+        self.reactor.timeout_add(250, self.end_checker)
 
         try:
             self.reactor.run()
@@ -896,11 +894,11 @@ class Go2Base(object):
 
     def create_tasks(self):
         self.create_file_tasks()
+        self.pool.join()
         self.create_command_tasks()
 
     def create_file_tasks(self):
         self.pool.add_task(from_file_provider, self.history)
-        self.pool.sleep_free_workers(seconds=0.5)
         self.pool.add_task(from_file_provider, self.cache)
 
     def not_overlapped_history(self):
@@ -924,8 +922,8 @@ class Go2Base(object):
                 message("'{0}' does not exist".format(path))
 
 #            print("add task: " + path)
-            self.pool.add_task(TreeProvider, path)
 #            self.pool.add_task(walk_provider, path)
+            self.pool.add_task(TreeProvider, path)
 
     def end_checker(self):
         return False
@@ -989,7 +987,7 @@ class Go2Interactive(Go2Base):
         save_target(self.menu.target)
 
         self.history.add_visit(self.menu.target).save()
-        logging.debug("Saved history %s", len(self.menu.entries))
+        logging.debug("saved history %s", len(self.menu.entries))
 
         self.cache.add_visit_seq(self.menu.entries).save()
 
@@ -1067,7 +1065,7 @@ def chdir_decorator(wizzard=False):
         save_target('-')
         return 0
 
-    if config.fs.exists(target):
+    if config.fs.isdir(target):
         save_in_history(target)
         save_target(target)
         return 0
@@ -1093,7 +1091,7 @@ def get_config(args=None):
                         action='store_true', default=False,
                         help="ignore case search")
     parser.add_argument('-l', '--list-only', dest='listonly', action='store_true',
-                        help="list matches and exits")
+                        help="list matches and exit")
     parser.add_argument('-p', '--path', metavar='PATH', dest='search_path',
                         default="{0}:{1}".format(CWD, USERDIR),
                         help='set search path (default: "./:{0}")'.format(USERDIR))
@@ -1138,13 +1136,17 @@ def get_config(args=None):
     return retval
 
 
+def is_an_actual_dir():
+    return len(config.pattern) == 1 and config.pattern[0][-1] == os.sep and config.fs.isdir(config.pattern[0])
+
+
 if __name__ == '__main__':
     config = get_config(sys.argv[1:])
 
     if config.setup:
         sys.exit(go2setup())
 
-    if config.chdir:
+    if config.chdir or is_an_actual_dir():
         try:
             sys.exit(chdir_decorator())
         except NotExistsException as target:
