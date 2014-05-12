@@ -83,6 +83,7 @@ GO2CACHE   = os.path.join(GO2DIR, 'cache')
 #GO2CONFIG  = os.path.join(GO2DIR, 'config')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
+GO2ERRORS  = os.path.join(GO2DIR, 'errors')
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
 CD_MODE_CMD = "alias cd='go2 --cd'"
@@ -90,21 +91,37 @@ CD_MODE_CMD = "alias cd='go2 --cd'"
 STOP = 'STOP'
 
 
+# os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
+
 logging.basicConfig(
-    filename=os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
+    filename=GO2LOG,
     filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
 
 
-def get_encoding():
-    try:
-        config_encoding = config.encoding
-    except NameError:
-        config_encoding = None
+class MyLogger:
+    def __init__(self):
+        self.logger = logging.getLogger("error")
+        handler = logging.FileHandler(filename=GO2ERRORS, mode='w')
+        handler.setFormatter(logging.Formatter('%(levelname)s %(asctime)-15s %(message)s'))
+        self.logger.addHandler(handler)
+        self.were_errors = False
 
-    return config_encoding or 'utf8'
+    def error(self, msg):
+        self.logger.error(msg)
+        self.were_errors = True
 
+errorlog = MyLogger()
+
+# def get_encoding():
+#     try:
+#         config_encoding = config.encoding
+#     except NameError:
+#         config_encoding = None
+#
+#     return config_encoding or 'utf8'
+#
 
 # def to_unicode(text, encoding=None):
 #     encoding = encoding or get_encoding()
@@ -128,6 +145,10 @@ def get_encoding():
 class Go2Exception(Exception):
     def __str__(self):
         return repr(self)
+
+
+class PathError(Exception):
+    pass
 
 
 class PathItem(object):
@@ -404,7 +425,11 @@ class CommandProvider:
                     return
 
                 path = path.strip().decode()
-                self.path_sanity_check(path)
+
+                try:
+                    self.path_sanity_check(path)
+                except PathError as e:
+                    yield e
 
                 level = config.matcher.match(path)
                 if level == MatchLevel.NO_MATCH:
@@ -430,17 +455,19 @@ class TreeProvider(CommandProvider):
         assert os.path.isabs(path)
         assert config.fs.isdir(path)
         self.path = path
-        super(TreeProvider, self).__init__(
-            command='tree -dfin --noreport "%s"' % path)
+        self.command = 'tree -dfin --noreport "{}"'.format(path)
+        super(TreeProvider, self).__init__(command=self.command)
 
     def path_sanity_check(self, path):
         errormsg = "[error opening dir]"
         if not errormsg in path:
             return
 
-        path = path.replace(errormsg, "")
-        logging.error(path)
-        rprint("(go2) access error: %s\n" % path)
+        msg = "'{}' {}".format(self.command, path)
+        raise PathError(msg)
+#        logging.error(msg)
+#        errorlog.error(msg)
+        print("--> %s" % errorlog.were_errors)
 
 
 def walk_provider(path):
@@ -674,6 +701,10 @@ class PathBuffer(object):
     def _tryTo_add(self, item):
 #        print '\r', repr(item.path)
 #        print '\r', self.groups[item.level]
+
+        if isinstance(item, PathError):
+            errorlog.error(str(item))
+            return
 
         if item.path in self.groups[item.level] or \
                 any(f(item.path) for f in self.filters):
@@ -959,7 +990,8 @@ class Go2Interactive(Go2Base):
     def end_checker(self):
         if self.menu.is_full:
             message("warning: too many matches!")
-            rprint('Select path: ')
+            self.on_end()
+            rprint("Select path: ")
             self.pool.terminate()
             return False
 
@@ -970,10 +1002,12 @@ class Go2Interactive(Go2Base):
         self.path_buffer.flush_alternate()
 
         if len(self.menu.entries) == 0:
+            self.on_end()
             raise NotMatchException
 
         if len(self.menu.entries) == 1:
             message("single match")
+            self.on_end()
             self.menu.perform_choice(0)
             return False
 
@@ -990,6 +1024,10 @@ class Go2Interactive(Go2Base):
         logging.debug("saved history %s", len(self.menu.entries))
 
         self.cache.add_visit_seq(self.menu.entries).save()
+
+    def on_end(self):
+        if errorlog.were_errors:
+            message("there were errors. See '{}'".format(GO2ERRORS))
 
 
 class Go2ListOnly(Go2Base):
