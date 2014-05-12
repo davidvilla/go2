@@ -1,4 +1,3 @@
-
 Desde un directorio que ya no existe:
 
 sh: 0: getcwd() failed: No such file or directory
@@ -115,4 +114,24 @@ Traceback (most recent call last):
     sys.exit(create_directory_wizzard(target.args[0]))
   File "/usr/lib/go2/go2.py", line 972, in create_directory_wizzard
     print "go2: '%s' does not exist.\n(c)ancel, (s)earch or (m)ake? (C/s/m):" % target,
+UnboundLocalError: local variable 'target' referenced before assignment
+
+
+---
+
+/mp3player$ cd ..
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1105, in chdir_decorator
+    target = os.path.abspath(params)
+  File "/usr/lib/python3.3/posixpath.py", line 385, in abspath
+    cwd = os.getcwd()
+FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/go2/go2.py", line 1202, in <module>
+    sys.exit(chdir_decorator())
+  File "/usr/lib/go2/go2.py", line 1108, in chdir_decorator
+    save_target(target)
 UnboundLocalError: local variable 'target' referenced before assignment
