@@ -86,7 +86,15 @@ GO2LOG     = os.path.join(GO2DIR, 'log')
 GO2ERRORS  = os.path.join(GO2DIR, 'errors')
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
-CD_MODE_CMD = "alias cd='go2 --cd'"
+CD_MODE_CMD = """
+function go2-cd() {
+  if type go2 &> /dev/null; then
+    go2 --cd $*
+  else
+    \cd $*
+  fi
+}
+alias cd='go2-cd'"""
 
 STOP = 'STOP'
 
@@ -558,7 +566,12 @@ class TaskQueue(mp_queues.JoinableQueue):
 
 class ProcessPool(object):
     def __init__(self, num_workers=None):
-        self.task_queue = TaskQueue()
+        try:
+            self.task_queue = TaskQueue()
+        except OSError as e:
+            message(str(e))
+            message("See http://goo.gl/a1hhU0")
+
         self.output_queue = mp.Queue()
 
         num_workers = num_workers or mp.cpu_count()
