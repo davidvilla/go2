@@ -5,9 +5,10 @@ URL_AUTH=svn+ssh://${ALIOTH_USER}@svn.debian.org/svn/python-apps/packages/go2/tr
 URL_ANON=svn://svn.debian.org/svn/python-apps/packages/go2/trunk
 
 debian:
-	if [ ! -z "$${ALIOTH_USER}" ]; then \
+	@if [ ! -z "$${ALIOTH_USER}" ]; then \
 	    svn co ${URL_AUTH} -N; \
 	else \
+            echo anon svn; \
 	    svn co ${URL_ANON} -N; \
 	fi
 
