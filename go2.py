@@ -567,7 +567,7 @@ class TaskQueue(mp_queues.JoinableQueue):
 class ProcessPool(object):
     def __init__(self, num_workers=None):
         try:
-            self.task_queue = TaskQueue()
+            self.task_queue = TaskQueue(ctx=mp)
         except OSError as e:
             message(str(e))
             message("See http://goo.gl/a1hhU0")
