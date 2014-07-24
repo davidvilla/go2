@@ -567,7 +567,10 @@ class TaskQueue(mp_queues.JoinableQueue):
 class ProcessPool(object):
     def __init__(self, num_workers=None):
         try:
-            self.task_queue = TaskQueue(ctx=mp)
+            try:
+                self.task_queue = TaskQueue()
+            except TypeError:
+                self.task_queue = TaskQueue(ctx=mp)
         except OSError as e:
             message(str(e))
             message("See http://goo.gl/a1hhU0")
@@ -1103,11 +1106,12 @@ def chdir_decorator(wizzard=False):
     params = str.join(' ', config.pattern)
     try:
         target = os.path.abspath(params)
-    except IOError as e:
-        logging.error(e)
-        save_target(target)
-        return 0
-    except OSError as e:
+#    except IOError as e:
+#        logging.error(e)
+#        save_target(target)
+#        return 0
+    except (IOError, OSError, FileNotFoundError) as e:
+        message("Current directory does not exists")
         logging.error(e)
         save_target(USERDIR)
         return 0
