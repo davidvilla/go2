@@ -101,9 +101,11 @@ STOP = 'STOP'
 
 # os.path.join('/tmp/go2-%s' % pwd.getpwuid(os.getuid())[0]),
 
+if not os.path.exists(GO2DIR):
+    os.mkdir(GO2DIR)
+
 logging.basicConfig(
     filename=GO2LOG,
-    filemode='w',
     format='%(asctime)-15s %(message)s',
     level=logging.DEBUG)
 
