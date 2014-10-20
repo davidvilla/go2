@@ -1,3 +1,9 @@
+Release 0.20141020
+------------------
+
+* TaskQueue requires a ctx parameter in python-3.4
+* go2 --cd target/ (with final slash) adds 200 to priority
+
 Release 0.20121210
 ------------------
 

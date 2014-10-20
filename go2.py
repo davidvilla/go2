@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '2.20140918'
+VERSION = '2.20141020'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
@@ -57,6 +57,7 @@ import shlex
 from traceback import print_exc
 from itertools import cycle
 from fnmatch import fnmatch
+from functools import cmp_to_key
 
 from gi.repository import GObject, GLib
 import argparse
@@ -337,9 +338,11 @@ class PathFileStore:
 
             return retval
 
+        def _key(p):
+            return p[1], p[0]
+
 #       FIXME: python3 sorted has not "cmp"
-#        for path, visits in sorted(list(self.data.items()), cmp=_cmp):
-        for path, visits in sorted(list(self.data.items())):
+        for path, visits in sorted(list(self.data.items()), key=_key, reverse=True):
             yield path
 
     def add_visit_seq(self, seq):
@@ -364,8 +367,8 @@ class PathFileStore:
         return "<PathFileStore '{0}'>".format(self.path)
 
 
-def save_in_history(path, how_many):
-    PathFileStore(GO2HISTORY).add_visit(path, how_many).save()
+def save_in_history(path, inc_priority):
+    PathFileStore(GO2HISTORY).add_visit(path, inc_priority).save()
 
 
 def from_file_provider(path_store):
@@ -1106,6 +1109,8 @@ def chdir_decorator(wizzard=False):
         return 0
 
     params = str.join(' ', config.pattern)
+    vip_path = params.endswith(os.sep)
+
     try:
         target = os.path.abspath(params)
 #    except IOError as e:
@@ -1123,7 +1128,7 @@ def chdir_decorator(wizzard=False):
         return 0
 
     if config.fs.isdir(target):
-        save_in_history(target, 50)
+        save_in_history(target, 200 if vip_path else 50)
         save_target(target)
         return 0
 
