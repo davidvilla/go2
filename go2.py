@@ -339,22 +339,26 @@ class PathFileStore:
             return retval
 
         def _key(p):
-            return p[1], p[0]
+            return -p[1], p[0]
 
 #       FIXME: python3 sorted has not "cmp"
-        for path, visits in sorted(list(self.data.items()), key=_key, reverse=True):
+        for path, visits in sorted(list(self.data.items()), key=_key):
+#            rprint("{} - {}\n".format(path, visits))
             yield path
 
-    def add_visit_seq(self, seq):
+    def add_visit_seq(self, seq, add_priority=1, set_priority=None):
         assert isinstance(seq, list)
         for path in seq:
-            self.add_visit(path)
+            self.add_visit(path, add_priority, set_priority)
         return self
 
-    def add_visit(self, path, how_many=1):
+    def add_visit(self, path, add_priority=1, set_priority=None):
         assert isinstance(path, str), path
-        visits = self.data.get(path, 0)
-        self.data[path] = visits + how_many
+        if set_priority is not None:
+            self.data[path] = set_priority
+        else:
+            visits = self.data.get(path, 0)
+            self.data[path] = visits + add_priority
         return self
 
     def save(self):
@@ -951,6 +955,7 @@ class Go2Base:
 
     def create_file_tasks(self):
         self.pool.add_task(from_file_provider, self.history)
+        self.pool.sleep_free_workers(0.1)
         self.pool.add_task(from_file_provider, self.cache)
 
     def not_overlapped_history(self):
@@ -1044,7 +1049,7 @@ class Go2Interactive(Go2Base):
         self.history.add_visit(self.menu.target).save()
         logging.debug("saved history %s", len(self.menu.entries))
 
-        self.cache.add_visit_seq(self.menu.entries).save()
+        self.cache.add_visit_seq(self.menu.entries, set_priority=1).save()
 
     def on_end(self):
         if errorlog.were_errors:
