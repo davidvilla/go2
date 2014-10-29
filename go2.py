@@ -879,7 +879,7 @@ class IgnoreManager(object):
         self.patterns = []
         for line in content.split():
             line = line.strip()
-            if not os.sep in line:
+            if os.sep not in line:
                 line = '*/{0}/*'.format(line)
 
             self.patterns.append(line)
@@ -1114,7 +1114,7 @@ def chdir_decorator(wizzard=False):
         return 0
 
     params = str.join(' ', config.pattern)
-    vip_path = params.endswith(os.sep)
+    vip_path = params.endswith(os.sep * 2)
 
     try:
         target = os.path.abspath(params)
