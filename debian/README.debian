@@ -1,0 +1,5 @@
+
+If you want to use go2, you must include next line in your ~/.bashrc:
+
+[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh
+
