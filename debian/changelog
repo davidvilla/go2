@@ -1,3 +1,9 @@
+go2 (2.20181225-1) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@gmail.com>  Tue, 25 Dec 2018 17:46:25 +0100
+
 go2 (2.20170703-1) unstable; urgency=low
 
   * New release
