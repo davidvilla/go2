@@ -1,0 +1,23 @@
+Source: go2
+Section: utils
+Priority: optional
+Maintainer: David Villa Alises <David.Villa@gmail.com>
+Uploaders: Python Apps Packaging Team <python-apps-team@lists.alioth.debian.org>
+Build-Depends: debhelper (>= 9), python3, python-docutils, dh-python
+Standards-Version: 3.9.6
+Homepage: http://savannah.nongnu.org/projects/go2/
+
+Package: go2
+Architecture: all
+Depends: ${misc:Depends}, python, tree, python3-gi, ${python3:Depends}
+Description: fast directory finder
+ This package provides a mechanism for quickly changing directory on
+ the commandline, in the style of the old Norton Change Directory for
+ DOS, but designed specifically for bash.
+ .
+ Features:
+  * cache of recent searches;
+  * history list of visited directories;
+  * blacklist of directories not to search;
+  * configuration file for default options;
+  * multiprocess execution.

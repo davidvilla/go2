@@ -1,0 +1,7 @@
+# -*- coding: utf-8; mode: shell-script; tab-width: 4 -*-
+
+function ian-release-hook() {
+    local version=$(version-upstream)
+    sc-assert-files-exist setup.py
+    sed -i -e "s/\( *version *= *\)'[0-9\.]\+'/\1'$version'/g" setup.py
+}

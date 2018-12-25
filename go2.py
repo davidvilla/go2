@@ -834,7 +834,12 @@ class Menu(Sink):
         return '{0:c}: {1}'.format(index, path)
 
     def out_write(self, text):
-        self.fd.write(text)
+        try:
+            self.fd.write(text)
+        except UnicodeEncodeError as e:
+            print("out_write {}".format(e))
+            print(repr(text))
+
         self.fd.flush()
 
 
