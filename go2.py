@@ -3,7 +3,7 @@
 
 # go2.py
 #
-# Copyright © 2004-2014 David Villa Alises
+# Copyright © 2004-2015 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,12 +19,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '2.20141020'
+VERSION = '2.20150113'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
 
-This is version {0}, Copyright (C) 2004-2014 David Villa Alises.
+This is version {0}, Copyright (C) 2004-2015 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''
@@ -124,33 +124,6 @@ class MyLogger:
         self.were_errors = True
 
 errorlog = MyLogger()
-
-# def get_encoding():
-#     try:
-#         config_encoding = config.encoding
-#     except NameError:
-#         config_encoding = None
-#
-#     return config_encoding or 'utf8'
-#
-
-# def to_unicode(text, encoding=None):
-#     encoding = encoding or get_encoding()
-#
-#     if isinstance(text, str):
-#         return text
-#
-#     return str(text, encoding=encoding, errors='replace')
-
-
-# def to_text(text, encoding=None):
-#     encoding = encoding or get_encoding()
-#
-#     if isinstance(text, bytes):
-#         return text
-#
-#     return text.encode(encoding=encoding, errors='replace')
-# #    return text.encode(encoding=encoding, errors='replace')
 
 
 class Go2Exception(Exception):
@@ -300,7 +273,7 @@ class PathFileStore:
         self.size = size
         self.data = {}
         self.load()
-#        self.log = logging.getLogger('PathFileStore [%s]' % os.path.split(path)[-1])
+        # self.log = logging.getLogger('PathFileStore [%s]' % os.path.split(path)[-1])
 
     def load(self):
         try:
@@ -313,7 +286,6 @@ class PathFileStore:
     def _load_file_lines(self, fd):
         def decode(path):
             return path.strip()
-#            return to_unicode(path.strip())
 
         for line in fd:
             line = line.strip()
@@ -343,7 +315,6 @@ class PathFileStore:
 
 #       FIXME: python3 sorted has not "cmp"
         for path, visits in sorted(list(self.data.items()), key=_key):
-#            rprint("{} - {}\n".format(path, visits))
             yield path
 
     def add_visit_seq(self, seq, add_priority=1, set_priority=None):
@@ -398,7 +369,7 @@ class CommandProvider:
             shell      = False,
             close_fds  = True,
             stdout     = subp.PIPE,
-#            stderr     = subp.PIPE,
+            # stderr     = subp.PIPE,
             preexec_fn = os.setsid)
 
         logging.info('%s: starts', self)
@@ -477,7 +448,7 @@ class TreeProvider(CommandProvider):
 
     def path_sanity_check(self, path):
         errormsg = "[error opening dir]"
-        if not errormsg in path:
+        if errormsg not in path:
             return
 
         msg = "'{}' {}".format(self.command, path)
@@ -497,7 +468,7 @@ def walk_provider(path):
                  if not x.startswith('.')]
 
         for path in paths:
-            #FIXME: refactor this, is repeated in all providers
+            # FIXME: refactor this, is repeated in all providers
             level = config.matcher.match(path)
             if level == MatchLevel.NO_MATCH:
                 continue
@@ -564,8 +535,8 @@ class Worker(mp.Process):
                 self.output.put(x)
         except TypeError as e:
             print_exc()
-#            print("TypeError %s" % e)
-#            self.output.put(e)
+            # print("TypeError %s" % e)
+            # self.output.put(e)
 
 
 class TaskQueue(mp_queues.JoinableQueue):
@@ -689,7 +660,7 @@ class QueueReactor(object):
         self.context.iteration()
 
     def run(self):
-#        time.sleep(0.1)
+        # time.sleep(0.1)
         self.mainloop.run()
         self.at_quit_func()
         if self.exception is not None:
@@ -724,8 +695,8 @@ class PathBuffer(object):
         return True
 
     def _tryTo_add(self, item):
-#        print '\r', repr(item.path)
-#        print '\r', self.groups[item.level]
+        # print '\r', repr(item.path)
+        # print '\r', self.groups[item.level]
 
         if isinstance(item, PathError):
             errorlog.error(str(item))
@@ -861,7 +832,6 @@ class UserChoiceHandler(object):
 
     def __call__(self, fd, condition=None):
         key = ord(fd.read(1))
-#        key = os.read(fd, 1)
         user_break_checker(key)
 
         try:
@@ -971,20 +941,20 @@ class Go2Base:
 
             history_paths.append(p)
 
-#        print str.join('\r\n', history_paths)
+        # print str.join('\r\n', history_paths)
         return history_paths
 
     def create_command_tasks(self):
         paths = ListUniq(config.search_path.split(':'))
-#        paths.extend(self.not_overlapped_history())
+        # paths.extend(self.not_overlapped_history())
 
         for path in set(paths):
             path = os.path.abspath(path)
             if not config.fs.isdir(path):
                 message("'{0}' does not exist".format(path))
 
-#            print("add task: " + path)
-#            self.pool.add_task(walk_provider, path)
+            # print("add task: " + path)
+            # self.pool.add_task(walk_provider, path)
             self.pool.add_task(TreeProvider, path)
 
     def end_checker(self):
@@ -1013,10 +983,6 @@ class Go2Interactive(Go2Base):
 
         sys.stdout = os.fdopen(sys.stdout.fileno(), 'w')
         atexit.register(stdout_restore)
-
-# fl = fcntl.fcntl(fd.fileno(), fcntl.F_GETFL)
-# fl |= os.O_SYNC # or os.O_DSYNC (if you don't care the file timestamp updates)
-# fcntl.fcntl(fd.fileno(), fcntl.F_SETFL, fl)
 
     def end_checker(self):
         if self.menu.is_full:
@@ -1123,10 +1089,6 @@ def chdir_decorator(wizzard=False):
 
     try:
         target = os.path.abspath(params)
-#    except IOError as e:
-#        logging.error(e)
-#        save_target(target)
-#        return 0
     except (IOError, OSError, FileNotFoundError) as e:
         message("Current directory does not exists")
         logging.error(e)
@@ -1182,16 +1144,10 @@ def get_config(args=None):
     retval.engine = Go2ListOnly if retval.listonly else Go2Interactive
 
     retval.encoding = encoding
-#    print(retval.pattern)
-#    print(retval.pattern, type(retval.pattern[0]))
-#    retval.pattern = [to_unicode(x, encoding) for x in retval.pattern]
 
     # process args
     if retval.ignorecase:
         retval.pattern = [x.lower() for x in retval.pattern]
-
-#    retval.apply_case = str.lower if retval.ignorecase else str
-#    print retval.pattern
 
     if retval.from_root:
         retval.search_path += ':/'
