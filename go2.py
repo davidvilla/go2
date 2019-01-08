@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '2.20150113'
+VERSION = '2.20190109'
 
 DESCRIPTION = '''\
 go2 is a fast directory finder.
@@ -628,7 +628,7 @@ class QueueReactor(object):
                 return False
 
     def __init__(self):
-        self.mainloop = GObject.MainLoop()
+        self.mainloop = GLib.MainLoop()
         self.context = self.mainloop.get_context()
         self.at_quit_func = lambda: None
         self.exception = None
