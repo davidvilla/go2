@@ -1,6 +1,9 @@
 go2
 ===
 
+- PYPI: https://pypi.org/project/go2/
+- Debian package: https://uclm-arco.github.io/debian/
+
 Description
 -----------
 
