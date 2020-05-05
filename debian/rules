@@ -1,13 +1,16 @@
 #!/usr/bin/make -f
 
+export PYBUILD_NAME=go2
+export DH_ALWAYS_EXCLUDE=__pycache__
+
 VERSION=$(shell head -n 1 debian/changelog | cut -f2 -d " " | tr -d "()" | cut -f1 -d "-")
 APP=go2
-ORIG_REPO=hg clone https://bitbucket.org/DavidVilla/go2
+ORIG_REPO=git clone git@bitbucket.org:DavidVilla/go2.git
 ORIG_DIR=$(APP)-$(VERSION)
 EXCLUDE=--exclude=debian --exclude=\*~ --exclude=.hg --exclude=.svn --exclude=\*.pyc
 
 %:
-	dh $@ --with=python3
+	dh $@ --with python3 --buildsystem=pybuild
 
 override_dh_auto_build:
 	dh_auto_build

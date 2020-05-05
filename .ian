@@ -1,16 +1,21 @@
 # -*- coding: utf-8; mode: shell-script; tab-width: 4 -*-
 
-function ian-release-hook-DISABLED() {
+function ian-release-hook() {
     local version=$(upstream-version)
-    sc-assert-files-exist commodity/version.py
-    echo "__version__ = '$version'" > commodity/version.py
+    log-info "setting version to $version"
+    sc-assert-files-exist version.py
+    echo "__version__ = '$version'" > version.py
 
-    hg tag "$version"
+    # hg tag "$version"
 
     version-summary
 }
 
+function ian-build-end-hook {
+	version-summary
+}
+
 function ian-clean-hook {
     rm -rf MANIFEST
-    rm -rf dist
-}	
+    rm -rf dist *.egg-info
+}

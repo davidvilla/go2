@@ -1,3 +1,10 @@
+go2 (2.20181225.2-1) unstable; urgency=low
+
+  * New release
+  * Fix debian build files, repo migrated to git
+
+ -- David Villa Alises <David.Villa@gmail.com>  Tue, 05 May 2020 12:27:59 +0200
+
 go2 (2.20181225-1) unstable; urgency=low
 
   * New release
