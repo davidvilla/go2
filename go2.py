@@ -19,12 +19,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION = '2.20190109'
+__version__ = '2.20190109'
 
-DESCRIPTION = '''\
+DESCRIPTION = f'''\
 go2 is a fast directory finder.
 
-This is version {0}, Copyright (C) 2004-2015 David Villa Alises.
+This is version {__version__}, Copyright (C) 2004-2020 David Villa Alises.
 go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
 are welcome to redistribute it under certain conditions; See COPYING
 for details.'''
@@ -1114,7 +1114,7 @@ def get_config(args=None):
 
     parser = argparse.ArgumentParser(
         prog = 'go2',
-        description = DESCRIPTION.format(VERSION),
+        description = DESCRIPTION,
         epilog = '.',
         formatter_class = argparse.RawDescriptionHelpFormatter)
 
@@ -1133,7 +1133,7 @@ def get_config(args=None):
                         action='store_true',
                         help="add / to the search path")
     parser.add_argument('-v', '--version', action='version',
-                        version='%(prog)s ' + VERSION)
+                        version='%(prog)s ' + __version__)
     parser.add_argument('--setup',
                         action='store_true',
                         help="install go2 in your .bashrc")
