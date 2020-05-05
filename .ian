@@ -6,7 +6,7 @@ function ian-release-hook() {
     sc-assert-files-exist version.py
     echo "__version__ = '$version'" > version.py
 
-    # hg tag "$version"
+    git tag "$version"
 
     version-summary
 }
