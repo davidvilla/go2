@@ -1,4 +1,4 @@
-go2 (2.20181225.2-1) unstable; urgency=low
+go2 (2.20181225.5-1) unstable; urgency=low
 
   * New release
   * Fix debian build files, repo migrated to git

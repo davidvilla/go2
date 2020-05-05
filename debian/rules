@@ -5,7 +5,7 @@ export DH_ALWAYS_EXCLUDE=__pycache__
 
 VERSION=$(shell head -n 1 debian/changelog | cut -f2 -d " " | tr -d "()" | cut -f1 -d "-")
 APP=go2
-ORIG_REPO=git clone git@bitbucket.org:DavidVilla/go2.git
+ORIG_REPO=git@bitbucket.org:DavidVilla/go2.git
 ORIG_DIR=$(APP)-$(VERSION)
 EXCLUDE=--exclude=debian --exclude=\*~ --exclude=.hg --exclude=.svn --exclude=\*.pyc
 
@@ -21,6 +21,6 @@ override_dh_auto_clean:
 	-$(RM) go2.1
 
 get-orig-source:
-	$(ORIG_REPO) $(ORIG_DIR)
+	git clone $(ORIG_REPO) --branch $(VERSION) --single-branch $(ORIG_DIR)
 	tar $(EXCLUDE) -czf $(APP)_$(VERSION).orig.tar.gz $(ORIG_DIR)
 	$(RM) -r $(ORIG_DIR)
