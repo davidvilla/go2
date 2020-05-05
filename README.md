@@ -73,33 +73,33 @@ go2 has some options to perform searches from the '/' directory, to ask case-ins
 matching, etc. Try this::
 
 ```text
-    $ go2 --help
-    usage: go2 [-h] [--cd] [-i] [-r] [--setup] [--version] [pattern [pattern ...]]
+$ go2 --help
+usage: go2 [-h] [--cd] [-i] [-r] [--setup] [--version] [pattern [pattern ...]]
 
-    go2 is a fast directory finder.
+go2 is a fast directory finder.
 
-    This is version 1.20111128, Copyright (C) 2004-2011 David Villa Alises.
-    go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
-    are welcome to redistribute it under certain conditions; See COPYING
-    for details.
+This is version 1.20111128, Copyright (C) 2004-2011 David Villa Alises.
+go2 comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See COPYING
+for details.
 
-    positional arguments:
-      pattern            pattern to find
+positional arguments:
+  pattern            pattern to find
 
-    optional arguments:
-      -h, --help         show this help message and exit
-      --cd               change to given dir and add it to the cache (useful as
-                         'cd' alias)
-      -i, --ignore-case  ignore case search
-      -r, --from-root    search in whole file system
-      --setup            install go2 in your .bashrc
-      --version          show program's version number and exit
+optional arguments:
+  -h, --help         show this help message and exit
+  --cd               change to given dir and add it to the cache (useful as
+                     'cd' alias)
+  -i, --ignore-case  ignore case search
+  -r, --from-root    search in whole file system
+  --setup            install go2 in your .bashrc
+  --version          show program's version number and exit
 ```
 
 'pattern' may be a word list so it is possible to do things like::
 
 ```
-    $ go2 -r cach arch
-    a: /var/cache/apt/archives
-    Searching...
+$ go2 -r cach arch
+a: /var/cache/apt/archives
+Searching...
 ```
