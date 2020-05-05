@@ -30,13 +30,19 @@ Features:
 - autojump
 
 
-# Instalation
+# Install
 
-The easiest way is to install the [debian package](https://uclm-arco.github.io/debian)  using
+The recommended way is to install the [debian package](https://uclm-arco.github.io/debian)  using
 apt-get::
 
 ```
 # apt-get install go2
+```
+
+alternatively you may install from PYPI with:
+
+```
+$ sudo pip3 install --prefix /usr go2
 ```
 
 Once it is installed, each user need to include next line at the end of their `~/.bashrc`:
