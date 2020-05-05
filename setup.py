@@ -40,4 +40,9 @@ setup(name         = 'go2',
       data_files   = [('lib/go2', ['go2.sh', 'go2.py', 'osfs.py']),
                       ('share/man/man1', ['go2.1'])],
       scripts      =  ['go2'],
+      long_description=long_description,
+      long_description_content_type="text/markdown",
+      classifiers=[
+        "Programming Language :: Python :: 3",
+      ]
       )
