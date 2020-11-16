@@ -19,7 +19,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-from version import __version__
+__version__ = '2.20201116.1'
+
 
 DESCRIPTION = f'''\
 go2 is a fast directory finder.

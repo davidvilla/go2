@@ -5,6 +5,7 @@ function ian-release-hook() {
     log-info "setting version to $version"
     sc-assert-files-exist version.py
     echo "__version__ = '$version'" > version.py
+	sed -i "s/__version__ = .*/__version__ = '$version'/g" go2.py
     git tag "$version"
 
     version-summary
