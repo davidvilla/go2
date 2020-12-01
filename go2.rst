@@ -32,7 +32,7 @@ IMPORTANT
 sentence in your $HOME/.bashrc file:
 
 |
-|    [ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh
+|  [ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh
 
 If your wish improve directory caching, you may include also the next
 sentence:
@@ -42,6 +42,7 @@ sentence:
 
 Both are made by the setup process the first time you invoke ``go2``.
 
+
 OPTIONS
 =======
 
@@ -49,23 +50,17 @@ This program follows the usual GNU command line syntax, with long
 options starting with two dashes ('-'). A summary of options is
 included below. For a complete description, see the Info files.
 
---cd            Just change working directory
+-i, --ignore-case     ignore case search
 
--i		Case insensitive.
+-l, --list-only       list matches and exit
 
--r		Search from root directory.
+-p PATH, --path PATH  set search path (default: "./:~/")
 
--d		Search in hidden directories.
+-r, --from-root       add / to the search path
 
--l		List only, print matches and exists.
+-v, --version         show program's version number and exit
 
---setup		Install go2 in your .bashrc.
-
-SEE ALSO
-========
-
-| This program is fully documented in
-| http://arco.esi.uclm.es/~david.villa/go2.html
+--setup               install go2 in your .bashrc
 
 
 COPYRIGHT
