@@ -4,9 +4,8 @@
 import sys
 import os
 
-import unittest2 as unittest
+import unittest
 from fs.memoryfs import MemoryFS
-from pyDoubles.framework import *
 
 sys.path.append('$basedir')
 
@@ -55,7 +54,8 @@ class Test_match(unittest.TestCase):
              '/foo/bar/FOO',
              ])
 
-    def disable_test_single_ignorecase_i18n(self):
+    @unittest.skip
+    def test_single_ignorecase_i18n(self):
         self.assert_match(
             ['ñandú'], Level.START_IGNORECASE,
             ['/Ñandúfoo',
@@ -78,7 +78,6 @@ class Test_match(unittest.TestCase):
              '/buzz/tafOobar',
              '/foo/bar/fofoofOO',
              ])
-
 
     def test_multi(self):
         self.assert_match(
@@ -108,6 +107,17 @@ class Test_match(unittest.TestCase):
             ['/usr/share/local',
              '/mnt/usr-doc/lib/local',
              ])
+
+    def test_final_slash(self):
+        matcher = go2.PathMatcher(['foo/'])
+        self.assertEquals(matcher.match('/home/john/foo'), Level.START)
+        self.assertEquals(matcher.match('/home/john/foo/'), Level.START)
+
+    def test_not_final_slash(self):
+        matcher = go2.PathMatcher(['foo/'])
+        self.assertNotEquals(matcher.match('/home/john/foobar'), Level.START)
+        self.assertNotEquals(matcher.match('/home/john/foo/bar'), Level.START)
+
 
 
 class Test_high_pattern(unittest.TestCase):
@@ -148,6 +158,3 @@ class Test_high_pattern(unittest.TestCase):
         matcher = go2.PathMatcher(['hare', 'tow'])
         self.assertEquals(matcher.high_pattern('/usr/shares/local/stows'),
                           '/usr/s[hare]s/local/s[tow]s')
-
-
-UnitTestCase()

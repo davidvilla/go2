@@ -1,0 +1,10 @@
+debian/files
+go2.1
+.pybuild/
+__pycache__/
+build/
+debian/go2.*
+debian/.debhelper
+debian/go2/*
+go2.egg-info
+
