@@ -1,3 +1,9 @@
+go2 (2.20211126-1) unstable; urgency=low
+
+  * New release
+
+ -- David Villa Alises <David.Villa@gmail.com>  Fri, 26 Nov 2021 14:06:38 +0100
+
 go2 (2.20201116.1-1) unstable; urgency=low
 
   * New release

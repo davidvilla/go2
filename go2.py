@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-__version__ = '2.20201116.1'
+__version__ = '2.20211126'
 
 
 DESCRIPTION = f'''\
@@ -208,12 +208,16 @@ class MatchLevel:
 
 
 class PathMatcher(object):
-    def __init__(self, pattern):
+    def __init__(self, pattern: list):
+        if not isinstance(pattern, list):
+            raise TypeError('pattern must be a list')
+        self.pattern = pattern
         self.pre_compute(pattern)
 
     def pre_compute(self, pattern):
         self.re_start = self.pattern2re_start(pattern)
         self.re_contain = self.pattern2re_contain(pattern)
+        self.re_full = self.pattern2re_full(pattern)
         self.test_pattern(pattern)
 
     def test_pattern(self, pattern):
@@ -223,6 +227,12 @@ class PathMatcher(object):
             self.pre_compute([re.escape(x) for x in pattern])
 
     def match(self, path):
+        if self.re_full:
+            if re.match(self.re_full, path):
+                return MatchLevel.START
+            else:
+                return MatchLevel.NO_MATCH
+
         if re.match(self.re_start, path, re.UNICODE):
             return MatchLevel.START
 
@@ -245,11 +255,27 @@ class PathMatcher(object):
     def pattern2re_contain(pattern):
         return str.join('', ['.*/.*({0})[^/]*'.format(x) for x in pattern]) + '$'
 
+    @staticmethod
+    def pattern2re_full(pattern):
+        if not pattern or pattern[-1][-1] != '/':
+            return
+
+        pattern[-1] = pattern[-1].strip('/')
+        re_pattern = ['.*/({0})[^/]*'.format(x) for x in pattern[:-1]]
+        re_pattern.append('.*/' + pattern[-1] + '/?$')
+        return str.join('', re_pattern)
+
+    @property
+    def highlight_pattern(self):
+        pattern = self.pattern[:]
+        pattern[-1] = pattern[-1].strip('/')
+        return self.pattern2re_contain(pattern)
+
     def high_pattern(self, path):
         retval = ''
         begin = 0
 
-        mo = re.match(self.re_contain, path, re.IGNORECASE)
+        mo = re.match(self.highlight_pattern, path, re.IGNORECASE)
         if mo is None:
             return path
 

@@ -3,7 +3,7 @@ Section: utils
 Priority: optional
 Maintainer: David Villa Alises <David.Villa@gmail.com>
 Uploaders: Python Apps Packaging Team <python-apps-team@lists.alioth.debian.org>
-Build-Depends: debhelper (>= 9), python3, python-docutils, dh-python
+Build-Depends: debhelper (>= 9), python3, python3-docutils, dh-python
 Standards-Version: 4.3.0
 Homepage: https://bitbucket.org/DavidVilla/go2
 
