@@ -19,7 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-__version__ = '2.20211126'
+__version__ = '2.20241105'
 
 
 DESCRIPTION = f'''\
@@ -88,7 +88,7 @@ GO2LOG     = os.path.join(GO2DIR, 'log')
 GO2ERRORS  = os.path.join(GO2DIR, 'errors')
 
 ACTIVATION_CMD = "[ -e /usr/lib/go2/go2.sh ] && source /usr/lib/go2/go2.sh"
-CD_MODE_CMD = """
+CD_MODE_CMD = r"""
 function go2-cd() {
   if type go2 &> /dev/null; then
     go2 --cd $*
@@ -1137,7 +1137,8 @@ def chdir_decorator(wizzard=False):
 def get_config(args=None):
     args = args or []
 
-    encoding = locale.getdefaultlocale()[1]
+    locale.setlocale(locale.LC_ALL, '')
+    encoding = locale.getencoding() or locale.getlocale()[1]
 
     parser = argparse.ArgumentParser(
         prog = 'go2',
