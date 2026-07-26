@@ -79,10 +79,9 @@ except OSError:
     CWD = USERDIR
 
 GO2DIR     = os.path.join(USERDIR, '.go2')
-GO2IGNORE  = os.path.join(GO2DIR, 'ignore')
 GO2HISTORY = os.path.join(GO2DIR, 'history')
 GO2CACHE   = os.path.join(GO2DIR, 'cache')
-#GO2CONFIG  = os.path.join(GO2DIR, 'config')
+GO2CONFIG  = os.path.join(GO2DIR, 'config')
 GO2TMP     = os.path.join(GO2DIR, 'tmp')
 GO2LOG     = os.path.join(GO2DIR, 'log')
 GO2ERRORS  = os.path.join(GO2DIR, 'errors')
@@ -260,6 +259,7 @@ class PathMatcher(object):
         if not pattern or pattern[-1][-1] != '/':
             return
 
+        pattern = pattern[:]
         pattern[-1] = pattern[-1].strip('/')
         re_pattern = ['.*/({0})[^/]*'.format(x) for x in pattern[:-1]]
         re_pattern.append('.*/' + pattern[-1] + '/?$')
@@ -876,30 +876,24 @@ class UserChoiceHandler(object):
         return key - ord('a')
 
 
-class IgnoreManager(object):
-    def __init__(self, content):
-        self.patterns = []
-        for line in content.split():
-            line = line.strip()
-            if os.sep not in line:
-                line = '*/{0}/*'.format(line)
+def exclude_filter(dirs):
+    patterns = []
+    for d in dirs:
+        if os.sep not in d:
+            d = '*/{0}/*'.format(d)
 
-            self.patterns.append(line)
+        patterns.append(d)
 
-    @classmethod
-    def from_file(cls, fname):
-        return IgnoreManager(config.fs.getcontents(fname))
-
-    def is_ignored(self, path):
-        assert path.startswith(os.sep), "It must be an absolute path"
-
+    def is_excluded(path):
         path = os.path.normpath(path) + os.sep
 
-        retval = any(fnmatch(path, x) for x in self.patterns)
+        retval = any(fnmatch(path, x) for x in patterns)
         if retval:
-            logging.debug("Ignored: %s", path)
+            logging.debug("Excluded: %s", path)
 
         return retval
+
+    return is_excluded
 
 
 class Go2Base:
@@ -920,11 +914,10 @@ class Go2Base:
         atexit.register(stdin_tty.restore)
 
     def setup_ignore(self):
-        try:
-            ignore_manager = IgnoreManager.from_file(GO2IGNORE)
-            self.path_buffer.add_filter(ignore_manager.is_ignored)
-        except ResourceNotFoundError:
-            pass
+        if not config.exclude:
+            return
+
+        self.path_buffer.add_filter(exclude_filter(config.exclude))
 
     def stop(self, *args):
         self.pool.terminate()
@@ -1134,8 +1127,19 @@ def chdir_decorator(wizzard=False):
     raise NotExistsException(target)
 
 
+def read_config_file_args():
+    try:
+        with open(GO2CONFIG) as fd:
+            return shlex.split(fd.read())
+    except FileNotFoundError:
+        return []
+
+
 def get_config(args=None):
     args = args or []
+
+    skip_config = '-s' in args or '--skip-config' in args
+    config_args = [] if skip_config else read_config_file_args()
 
     locale.setlocale(locale.LC_ALL, '')
     encoding = locale.getencoding() or locale.getlocale()[1]
@@ -1160,13 +1164,19 @@ def get_config(args=None):
     parser.add_argument('-r', '--from-root', dest='from_root',
                         action='store_true',
                         help="add / to the search path")
+    parser.add_argument('-e', '--exclude', dest='exclude',
+                        action='append', default=None, metavar='DIR',
+                        help="exclude a directory from search (can be given multiple times)")
+    parser.add_argument('-s', '--skip-config', dest='skip_config',
+                        action='store_true',
+                        help="don't read options from {0}".format(GO2CONFIG))
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s {__version__}')
     parser.add_argument('--setup',
                         action='store_true',
                         help="install go2 in your .bashrc")
 
-    retval = parser.parse_args(args)
+    retval = parser.parse_args(config_args + args)
     retval.parser = parser
 
     retval.engine = Go2ListOnly if retval.listonly else Go2Interactive
@@ -1179,6 +1189,8 @@ def get_config(args=None):
 
     if retval.from_root:
         retval.search_path += ':/'
+
+    retval.exclude = retval.exclude or []
 
     # application globals
     retval.matcher = PathMatcher(retval.pattern)

@@ -58,9 +58,24 @@ included below. For a complete description, see the Info files.
 
 -r, --from-root       add / to the search path
 
+-e DIR, --exclude DIR  exclude a directory from search (can be given
+                       multiple times)
+
+-s, --skip-config     don't read options from ~/.go2/config
+
 -v, --version         show program's version number and exit
 
 --setup               install go2 in your .bashrc
+
+
+FILES
+=====
+
+``~/.go2/config``
+    Holds default CLI options, one or more per line (e.g. ``--exclude
+    node_modules``). It is read on every invocation and merged with
+    the options given on the command line, unless ``-s``/``--skip-config``
+    is used.
 
 
 COPYRIGHT

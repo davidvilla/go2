@@ -411,73 +411,46 @@ class Test_UserChoiceHanlder(TestCase):
 #        assert_that_was_called(self.reactor_spy.quit)
 
 
-class TestIgnore(TestCase):
-    def create_manager(self, content):
-        return go2.IgnoreManager(content)
+class TestExcludeFilter(TestCase):
+    def create_filter(self, *dirs):
+        return go2.exclude_filter(list(dirs))
 
-    def test_ignored_path_with_1_pattern(self):
-        sut = self.create_manager("foo")
+    def test_excluded_path_with_1_pattern(self):
+        sut = self.create_filter("foo")
 
         self.assert_(
-            sut.is_ignored("/home/user/repo/foo"))
+            sut("/home/user/repo/foo"))
 
-    def test_ignored_path_with_2_patterns(self):
+    def test_excluded_path_with_2_patterns(self):
         # given
-        sut = self.create_manager('''
-foo
-bar''')
+        sut = self.create_filter("foo", "bar")
 
-        self.assert_(sut.is_ignored("/home/foo"))
-        self.assert_(sut.is_ignored("/home/bar"))
+        self.assert_(sut("/home/foo"))
+        self.assert_(sut("/home/bar"))
 
     def test_not_matching_path(self):
-        sut = self.create_manager("foo")
+        sut = self.create_filter("foo")
 
         self.assertFalse(
-            sut.is_ignored('/usr/share'))
+            sut('/usr/share'))
 
     def test_path_match_in_any_place(self):
-        sut = self.create_manager("foo")
+        sut = self.create_filter("foo")
 
         self.assert_(
-            sut.is_ignored('/usr/foo/share'))
+            sut('/usr/foo/share'))
 
     def test_path_not_match_if_not_full_name(self):
-        sut = self.create_manager("foo")
+        sut = self.create_filter("foo")
 
         self.assertFalse(
-            sut.is_ignored('/usr/xxfoo'))
+            sut('/usr/xxfoo'))
 
         self.assertFalse(
-            sut.is_ignored('/usr/fooxx'))
+            sut('/usr/fooxx'))
 
     def test_absolute_dir(self):
-        sut = self.create_manager('/usr/local/*')
+        sut = self.create_filter('/usr/local/*')
 
-        self.assert_(sut.is_ignored('/usr/local/foo'))
-        self.assert_(sut.is_ignored('/usr/local'))
-
-    def test_from_file__missing_file(self):
-        # given
-        fs = MemoryFS()
-        config = go2.get_config()
-        config.fs = fs
-        go2.config = config
-
-        # when
-        with self.assertRaises(ResourceNotFoundError):
-            go2.IgnoreManager.from_file('ignore')
-
-    def test_from_file(self):
-        # given
-        fs = MemoryFS()
-        fs.createfile('ignore', 'foo')
-        config = go2.get_config()
-        config.fs = fs
-        go2.config = config
-
-        # when
-        sut = go2.IgnoreManager.from_file('ignore')
-
-        # then
-        self.assert_(sut.is_ignored('/home/foo'))
+        self.assert_(sut('/usr/local/foo'))
+        self.assert_(sut('/usr/local'))
