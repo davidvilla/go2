@@ -1228,6 +1228,7 @@ def is_an_actual_dir():
 
 
 if __name__ == '__main__':
+    mp.set_start_method('fork')
     config = get_config(sys.argv[1:])
 
     if config.setup:
