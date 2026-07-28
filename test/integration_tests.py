@@ -21,8 +21,8 @@ def foo_filter(value):
 
 def pipe():
     a, b = socket.socketpair()
-    read_end = a.makefile()
-    write_end = b.makefile('w', 0)
+    read_end = a.makefile('rb', buffering=0)
+    write_end = b.makefile('wb', buffering=0)
     return read_end, write_end
 
 
@@ -60,14 +60,14 @@ class Test_Search(TestCase):
         # when
         self.put('foo')
         self.put('bar')
-        self.write_end.write('a')
+        self.write_end.write(b'a')
         self.reactor.run()
 
         # then
-        self.assertEquals(self.path_buffer.groups[0], ['bar'])
-        self.assertEquals(self.menu.entries, ['bar'])
+        self.assertEqual(self.path_buffer.groups[0], ['bar'])
+        self.assertEqual(self.menu.entries, ['bar'])
         assert_that(self.out.write, called().with_args('a: bar'))
-        self.assertEquals(self.menu.target, 'bar')
+        self.assertEqual(self.menu.target, 'bar')
 
     def test_full_menu(self):
         # given

@@ -1,2 +1,3 @@
-test:deb:python-fs
 test:deb:python-doublex
+test:deb:python-pyhamcrest
+test:deb:python3-prego

@@ -1,9 +1,8 @@
 #!/usr/bin/python3
-# -*- coding:utf-8; tab-width:4; mode:python -*-
 
 # go2.py
 #
-# Copyright © 2004-2015 David Villa Alises
+# Copyright © 2004-2026 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -198,6 +197,11 @@ class ListUniq(list):
             self.append(item)
 
 
+def is_nested_under(path, other):
+    "True if path is other itself or a strict descendant of it"
+    return path == other or path.startswith(other + os.sep)
+
+
 class MatchLevel:
     NO_MATCH = -1
     START = 0
@@ -214,34 +218,44 @@ class PathMatcher(object):
         self.pre_compute(pattern)
 
     def pre_compute(self, pattern):
-        self.re_start = self.pattern2re_start(pattern)
-        self.re_contain = self.pattern2re_contain(pattern)
-        self.re_full = self.pattern2re_full(pattern)
-        self.test_pattern(pattern)
-
-    def test_pattern(self, pattern):
         try:
-            re.match(self.re_start, "")
+            self.re_start = re.compile(self.pattern2re_start(pattern), re.UNICODE)
+            self.re_start_i = re.compile(
+                self.pattern2re_start(pattern), re.UNICODE | re.IGNORECASE)
+            self.re_contain = re.compile(self.pattern2re_contain(pattern), re.UNICODE)
+            self.re_contain_i = re.compile(
+                self.pattern2re_contain(pattern), re.UNICODE | re.IGNORECASE)
+
+            full_pattern = self.pattern2re_full(pattern)
+            self.re_full = re.compile(full_pattern) if full_pattern else None
+
+            self.re_highlight = self._compile_highlight_pattern(pattern)
         except re.error:
             self.pre_compute([re.escape(x) for x in pattern])
 
+    def _compile_highlight_pattern(self, pattern):
+        if not pattern:
+            return None
+
+        pattern = pattern[:]
+        pattern[-1] = pattern[-1].strip('/')
+        return re.compile(self.pattern2re_contain(pattern), re.IGNORECASE)
+
     def match(self, path):
         if self.re_full:
-            if re.match(self.re_full, path):
-                return MatchLevel.START
-            else:
-                return MatchLevel.NO_MATCH
+            return (MatchLevel.START if self.re_full.match(path)
+                    else MatchLevel.NO_MATCH)
 
-        if re.match(self.re_start, path, re.UNICODE):
+        if self.re_start.match(path):
             return MatchLevel.START
 
-        if re.match(self.re_start, path, re.UNICODE | re.IGNORECASE):
+        if self.re_start_i.match(path):
             return MatchLevel.START_IGNORECASE
 
-        if re.match(self.re_contain, path, re.UNICODE):
+        if self.re_contain.match(path):
             return MatchLevel.CONTAIN
 
-        if re.match(self.re_contain, path, re.UNICODE | re.IGNORECASE):
+        if self.re_contain_i.match(path):
             return MatchLevel.CONTAIN_IGNORECASE
 
         return MatchLevel.NO_MATCH
@@ -265,17 +279,14 @@ class PathMatcher(object):
         re_pattern.append('.*/' + pattern[-1] + '/?$')
         return str.join('', re_pattern)
 
-    @property
-    def highlight_pattern(self):
-        pattern = self.pattern[:]
-        pattern[-1] = pattern[-1].strip('/')
-        return self.pattern2re_contain(pattern)
-
     def high_pattern(self, path):
+        if self.re_highlight is None:
+            return path
+
         retval = ''
         begin = 0
 
-        mo = re.match(self.highlight_pattern, path, re.IGNORECASE)
+        mo = self.re_highlight.match(path)
         if mo is None:
             return path
 
@@ -386,9 +397,17 @@ def from_file_provider(path_store):
         yield PathItem(path, level)
 
 
+def from_file_providers(path_stores):
+    "runs path_stores in order on a single worker, so e.g. history always " \
+    "finishes reporting before cache, deterministically"
+    for path_store in path_stores:
+        yield from from_file_provider(path_store)
+
+
 class CommandProvider:
-    def __init__(self, command):
+    def __init__(self, command, skip_prefixes=None):
         self.command = command
+        self.skip_prefixes = skip_prefixes or []
 
         self.ps = subp.Popen(
             shlex.split(command),
@@ -446,11 +465,11 @@ class CommandProvider:
                 except PathError as e:
                     yield e
 
-                level = config.matcher.match(path)
-                if level == MatchLevel.NO_MATCH:
+                if any(is_nested_under(path, p) for p in self.skip_prefixes):
                     continue
 
-                if not config.fs.isdir(path):
+                level = config.matcher.match(path)
+                if level == MatchLevel.NO_MATCH:
                     continue
 
                 yield PathItem(path, level)
@@ -466,12 +485,13 @@ class CommandProvider:
 
 
 class TreeProvider(CommandProvider):
-    def __init__(self, path):
+    def __init__(self, path, skip_prefixes=None):
         assert os.path.isabs(path)
         assert config.fs.isdir(path)
         self.path = path
         self.command = 'tree -dfin --noreport "{}"'.format(path)
-        super(TreeProvider, self).__init__(command=self.command)
+        super(TreeProvider, self).__init__(
+            command=self.command, skip_prefixes=skip_prefixes)
 
     def path_sanity_check(self, path):
         errormsg = "[error opening dir]"
@@ -495,12 +515,8 @@ def walk_provider(path):
                  if not x.startswith('.')]
 
         for path in paths:
-            # FIXME: refactor this, is repeated in all providers
             level = config.matcher.match(path)
             if level == MatchLevel.NO_MATCH:
-                continue
-
-            if not config.fs.isdir(path):
                 continue
 
             yield PathItem(path, level)
@@ -592,12 +608,7 @@ class ProcessPool(object):
         logging.info('new task for: %s%s', func.__name__, args)
         self.task_queue.put((func, args))
 
-    def sleep_free_workers(self, seconds):
-        for i in range(len(self.workers) - self.task_queue.unfinished_tasks_count()):
-            self.add_task(time.sleep, seconds)
-
     def has_tasks(self):
-        time.sleep(0.1)
         return self.task_queue.unfinished_tasks_count() != 0
 
     def terminate(self):
@@ -771,7 +782,7 @@ class Sink(object):
     def add_entry(self, path):
         raise NotImplementedError
 
-    def next_group(self):
+    def next_group(self, name=''):
         pass
 
 
@@ -803,8 +814,8 @@ class Menu(Sink):
     def is_valid_choice(self, choice):
         return choice in range(0, len(self.entries))
 
-    def next_group(self):
-        self.out_write('\r   ---        \n')
+    def next_group(self, name=''):
+        self.out_write(f'\r   --- {name}\n')
 
     def add_entry(self, entry):
         assert isinstance(entry, str)
@@ -876,13 +887,19 @@ class UserChoiceHandler(object):
         return key - ord('a')
 
 
-def exclude_filter(dirs):
+def exclude_filter(dirs, pwd=None):
+    pwd_basename = os.path.basename(os.path.normpath(pwd or os.getcwd()))
+
     patterns = []
     for d in dirs:
-        if os.sep not in d:
-            d = '*/{0}/*'.format(d)
+        d = os.path.expanduser(d)
 
-        patterns.append(d)
+        if d.startswith(os.sep):
+            # a bare absolute path excludes itself and everything under it;
+            # a caller-supplied fnmatch pattern (containing '*') is used as-is
+            patterns.append(d if '*' in d else d + '/*')
+        elif d != pwd_basename:
+            patterns.append('*/{0}/*'.format(d))
 
     def is_excluded(path):
         path = os.path.normpath(path) + os.sep
@@ -944,38 +961,36 @@ class Go2Base:
         return retval
 
     def create_tasks(self):
-        self.create_file_tasks()
-        self.pool.join()
+        if not config.no_cache:
+            self.create_file_tasks()
+            self.pool.join()
+
         self.create_command_tasks()
 
     def create_file_tasks(self):
-        self.pool.add_task(from_file_provider, self.history)
-        self.pool.sleep_free_workers(0.1)
-        self.pool.add_task(from_file_provider, self.cache)
+        self.pool.add_task(from_file_providers, [self.history, self.cache])
 
     def not_overlapped_history(self):
         history_paths = []
         for p in sorted(list(self.history.data.keys()), key=len):
-            if any(p.startswith(x) for x in history_paths):
+            if any(is_nested_under(p, x) for x in history_paths):
                 continue
 
             history_paths.append(p)
 
-        # print str.join('\r\n', history_paths)
         return history_paths
 
     def create_command_tasks(self):
-        paths = ListUniq(config.search_path.split(':'))
-        # paths.extend(self.not_overlapped_history())
+        paths = list(set(
+            os.path.abspath(p) for p in set(config.search_path.split(':'))))
 
-        for path in set(paths):
-            path = os.path.abspath(path)
+        for path in paths:
             if not config.fs.isdir(path):
                 message("'{0}' does not exist".format(path))
 
-            # print("add task: " + path)
-            # self.pool.add_task(walk_provider, path)
-            self.pool.add_task(TreeProvider, path)
+            skip_prefixes = [other for other in paths
+                              if other != path and is_nested_under(other, path)]
+            self.pool.add_task(TreeProvider, path, skip_prefixes)
 
     def end_checker(self):
         return False
@@ -1170,6 +1185,10 @@ def get_config(args=None):
     parser.add_argument('-s', '--skip-config', dest='skip_config',
                         action='store_true',
                         help="don't read options from {0}".format(GO2CONFIG))
+    parser.add_argument('--no-cache', dest='no_cache',
+                        action='store_true',
+                        help="ignore history/cache, always search fresh "
+                             "(for provider comparisons)")
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s {__version__}')
     parser.add_argument('--setup',
