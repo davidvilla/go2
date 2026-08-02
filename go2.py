@@ -3,7 +3,7 @@
 
 # go2.py
 #
-# Copyright © 2004-2015 David Villa Alises
+# Copyright © 2004-2026 David Villa Alises
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -46,6 +46,7 @@ import termios
 import time
 import signal
 import re
+import difflib
 import logging
 import locale
 import atexit
@@ -204,6 +205,10 @@ class MatchLevel:
     START_IGNORECASE = 1
     CONTAIN = 2
     CONTAIN_IGNORECASE = 3
+    APPROX = 4
+
+
+APPROX_CUTOFF = 0.6
 
 
 class PathMatcher(object):
@@ -244,7 +249,37 @@ class PathMatcher(object):
         if re.match(self.re_contain, path, re.UNICODE | re.IGNORECASE):
             return MatchLevel.CONTAIN_IGNORECASE
 
+        if self.match_approx(path):
+            return MatchLevel.APPROX
+
         return MatchLevel.NO_MATCH
+
+    def match_approx(self, path):
+        segments = [s for s in path.split(os.sep) if s]
+        if not segments or not self.pattern:
+            return False
+
+        pos = 0
+        for term in self.pattern[:-1]:
+            pos = self.find_approx(term, segments, pos, len(segments) - 1)
+            if pos is None:
+                return False
+            pos += 1
+
+        return self.is_approx(self.pattern[-1], segments[-1])
+
+    @staticmethod
+    def is_approx(term, segment):
+        term = term.strip('/').lower()
+        return difflib.SequenceMatcher(None, term, segment.lower()).ratio() >= APPROX_CUTOFF
+
+    @classmethod
+    def find_approx(cls, term, segments, start, end):
+        for i in range(start, end):
+            if cls.is_approx(term, segments[i]):
+                return i
+
+        return None
 
     @staticmethod
     def pattern2re_start(pattern):
@@ -879,6 +914,7 @@ class UserChoiceHandler(object):
 def exclude_filter(dirs):
     patterns = []
     for d in dirs:
+        d = os.path.expanduser(d)
         if os.sep not in d:
             d = '*/{0}/*'.format(d)
 

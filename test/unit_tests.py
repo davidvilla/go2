@@ -454,3 +454,32 @@ class TestExcludeFilter(TestCase):
 
         self.assert_(sut('/usr/local/foo'))
         self.assert_(sut('/usr/local'))
+
+    def test_home_relative_dir(self):
+        sut = self.create_filter('~/algo/*')
+
+        self.assert_(sut(os.path.expanduser('~/algo/foo')))
+
+
+class TestPathMatcherApprox(TestCase):
+    def test_typo_matches_approx_level(self):
+        sut = go2.PathMatcher(['phto'])
+
+        self.assertEqual(go2.MatchLevel.APPROX, sut.match('/home/user/photo'))
+
+    def test_unrelated_name_does_not_match(self):
+        sut = go2.PathMatcher(['phto'])
+
+        self.assertEqual(go2.MatchLevel.NO_MATCH, sut.match('/home/user/foo'))
+
+    def test_typo_across_several_components(self):
+        sut = go2.PathMatcher(['rpo', 'documnts'])
+
+        self.assertEqual(
+            go2.MatchLevel.APPROX,
+            sut.match('/home/user/repo/documents'))
+
+    def test_exact_match_still_wins_over_approx(self):
+        sut = go2.PathMatcher(['foo'])
+
+        self.assertEqual(go2.MatchLevel.START, sut.match('/home/foo'))
