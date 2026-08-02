@@ -27,11 +27,12 @@ def local_open(fname):
 with open("README.md", "r") as readme:
     long_description = readme.read()
 
-exec(open('version.py').read())
+with open('debian/changelog') as f:
+    version = f.readline().split()[1][1:-1].split('-')[0]
 
 
 setup(name         = 'go2',
-      version      = __version__,
+      version      = version,
       description  = 'go2 directory finder',
       author       = 'David Villa Alises',
       author_email = 'David.Villa@gmail.com',
