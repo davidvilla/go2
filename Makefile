@@ -1,8 +1,10 @@
 #!/usr/bin/make -f
-# -*- mode:makefile -*-
 
 push:
 	git push --tags
+
+deb-update:
+	ian build -cli
 
 upload:
 	$(RM) -r dist
