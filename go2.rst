@@ -59,9 +59,17 @@ included below. For a complete description, see the Info files.
 -r, --from-root       add / to the search path
 
 -e DIR, --exclude DIR  exclude a directory from search (can be given
-                       multiple times)
+                       multiple times). DIR starting with '/' or '~' excludes
+                       that exact path (~ expands to your home directory); a
+                       bare name excludes any directory with that name
+                       anywhere, unless the current directory is itself
+                       named that way (in which case that particular
+                       exclusion is skipped for the whole search)
 
 -s, --skip-config     don't read options from ~/.go2/config
+
+--no-cache            ignore history/cache, always search fresh (useful to
+                      compare search providers on equal footing)
 
 -v, --version         show program's version number and exit
 
