@@ -750,7 +750,7 @@ class QueueReactor(object):
 class PathBuffer(object):
     def __init__(self, sink=None):
         self.sink = sink
-        self.groups = [list() for x in range(4)]
+        self.groups = [list() for x in range(5)]
         self.filters = []
 
     def set_sink(self, sink):
@@ -794,11 +794,11 @@ class PathBuffer(object):
                 self.sink.add_entry(path)
 
         try:
-            for level in range(1, 4):
+            for level in range(1, 5):
                 if not self.groups[level]:
                     continue
 
-                if level != 3:
+                if level != 4:
                     self.sink.next_group()
 
                 add_paths_of_group(self.groups[level])

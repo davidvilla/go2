@@ -202,6 +202,30 @@ class Test_PathBuffer(TestCase):
         # then
         assert_that(menu, verify())
 
+    def test_add_level_APPROX_does_not_raise(self):
+        # given
+        sut = go2.PathBuffer(Stub())
+
+        # when
+        sut.add(go2.PathItem(self.path, go2.MatchLevel.APPROX))
+
+        # then
+        self.assertIn(self.path, sut.groups[go2.MatchLevel.APPROX])
+
+    def test_add_alternate_flushes_APPROX_level(self):
+        # given
+        with Mock() as menu:
+            menu.add_entry(self.path)
+
+        sut = go2.PathBuffer(menu)
+
+        # when
+        sut.add(go2.PathItem(self.path, go2.MatchLevel.APPROX))
+        sut.flush_alternate()
+
+        # then
+        assert_that(menu, verify())
+
 
 class TestOSFS(TestCase):
     def setUp(self):
